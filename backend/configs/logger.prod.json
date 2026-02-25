@@ -1,0 +1,17 @@
+{
+    "level": "info",
+    "development": false,
+    "encoding": "json",
+    "outputPaths": ["stdout"],
+    "errorOutputPaths": ["stderr"],
+    "encoderConfig": {
+      "timeKey": "time",
+      "levelKey": "level",
+      "messageKey": "message",
+      "callerKey": "caller",
+      "stacktraceKey": "stacktrace",
+      "levelEncoder": "lowercase",
+      "timeEncoder": "iso8601",
+      "callerEncoder": "short"
+    }
+  }

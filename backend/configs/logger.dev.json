@@ -1,0 +1,16 @@
+{
+    "level": "debug",
+    "development": true,
+    "encoding": "console",
+    "outputPaths": ["stdout"],
+    "errorOutputPaths": ["stderr"],
+    "encoderConfig": {
+        "timeKey": "time",
+        "levelKey": "level",
+        "messageKey": "message",
+        "callerKey": "caller",
+        "levelEncoder": "capitalColor",
+        "timeEncoder": "iso8601",
+        "callerEncoder": "short"
+    }
+}
