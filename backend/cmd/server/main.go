@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 
+	"github.com/makimaki04/Calmly/internal/database"
 	"github.com/makimaki04/Calmly/internal/logger"
 	"go.uber.org/zap"
 )
@@ -32,4 +33,11 @@ func main() {
 		zap.String("component", "service"),
 		zap.String("operation", "init_logger"),
 	)
+
+	db, err := database.InitDB("", appLogger)
+	if err != nil {
+		os.Exit(1)
+	}
+
+	_ = db
 }
