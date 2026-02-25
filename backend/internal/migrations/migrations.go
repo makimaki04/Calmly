@@ -15,28 +15,56 @@ import (
 var migrationsDir embed.FS
 
 func RunMigrations(dsn string, logger *zap.Logger) error {
+	logger.Info("Migrations started",
+		zap.String("component", "repository"),
+		zap.String("operation", "run_migrations"),
+	)
+
 	d, err := iofs.New(migrationsDir, "migration_files")
 	if err != nil {
+		logger.Error("Migrations failed",
+			zap.String("component", "repository"),
+			zap.String("operation", "run_migrations"),
+			zap.Error(err),
+		)
 		return fmt.Errorf("%w", err)
 	}
 
 	m, err := migrate.NewWithSourceInstance("iofs", d, dsn)
 	if err != nil {
+		logger.Error("Migrations failed",
+			zap.String("component", "repository"),
+			zap.String("operation", "run_migrations"),
+			zap.Error(err),
+		)
 		return fmt.Errorf("%w", err)
 	}
-	defer func ()  {
+	defer func() {
 		srcErr, dbErr := m.Close()
 		if srcErr != nil {
-
+			logger.Error("Migrations close failed",
+				zap.String("component", "repository"),
+				zap.String("operation", "close_migrations"),
+				zap.Error(srcErr),
+			)
 		}
 
 		if dbErr != nil {
-
+			logger.Error("Migrations close failed",
+				zap.String("component", "repository"),
+				zap.String("operation", "close_migrations"),
+				zap.Error(dbErr),
+			)
 		}
 	}()
 
 	if err := m.Up(); err != nil {
 		if !errors.Is(err, migrate.ErrNoChange) {
+			logger.Error("Migrations failed",
+				zap.String("component", "repository"),
+				zap.String("operation", "run_migrations"),
+				zap.Error(err),
+			)
 			return fmt.Errorf("load migrations error: %w", err)
 		}
 	}
