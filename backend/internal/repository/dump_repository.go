@@ -150,8 +150,8 @@ func (r *DumpRepository) GetActiveDump(ctx context.Context, userID uuid.UUID) (*
 			return nil, nil
 		}
 		log.Error("Get active dump failed", zap.Error(err))
-		return &models.Dump{}, fmt.Errorf("select active dump: %w", err)
+		return nil, fmt.Errorf("select active dump: %w", err)
 	}
 
-	return dump, nil
+	return &dump, nil
 }
