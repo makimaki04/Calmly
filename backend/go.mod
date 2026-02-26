@@ -3,8 +3,10 @@ module github.com/makimaki04/Calmly
 go 1.25.5
 
 require (
+	github.com/caarlos0/env v3.5.0+incompatible
 	github.com/golang-migrate/migrate/v4 v4.19.1
 	github.com/jackc/pgx/v5 v5.5.4
+	github.com/joho/godotenv v1.5.1
 	go.uber.org/zap v1.27.1
 )
 
