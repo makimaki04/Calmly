@@ -11,7 +11,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func InitDB(dsn string, logger *zap.Logger) (*sql.DB, error) {
+func InitDB(ctx context.Context, dsn string, logger *zap.Logger) (*sql.DB, error) {
 	logger.Info("DB init started",
 		zap.String("component", "repository"),
 		zap.String("operation", "init_db"),
@@ -31,17 +31,28 @@ func InitDB(dsn string, logger *zap.Logger) (*sql.DB, error) {
 		return nil, fmt.Errorf("db open error: %w", err)
 	}
 
-	crx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	dbCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	if err := db.PingContext(crx); err != nil {
+	if err := db.PingContext(dbCtx); err != nil {
 		logger.Error("DB init failed",
 			zap.String("component", "repository"),
 			zap.String("operation", "init_db"),
 			zap.Error(err),
 		)
+		db.Close()
 		return nil, fmt.Errorf("db connection error: %w", err)
 	}
+
+	db.SetMaxOpenConns(20)
+	db.SetMaxIdleConns(20)
+	db.SetConnMaxLifetime(12*time.Minute)
+	db.SetConnMaxIdleTime(5*time.Minute)
+
+	logger.Info("DB init succeeded",
+		zap.String("component", "repository"),
+		zap.String("operation", "init_db"),
+	)
 
 	return db, nil
 }
