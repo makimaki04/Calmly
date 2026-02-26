@@ -49,7 +49,8 @@ CREATE TYPE dump_status AS enum (
     'new',
     'analyzed',
     'waiting_answers',
-    'planned'
+    'planned',
+    'abandoned'
 );
 
 CREATE TABLE dumps (
