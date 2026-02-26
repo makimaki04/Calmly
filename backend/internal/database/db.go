@@ -13,10 +13,12 @@ import (
 )
 
 func InitDB(ctx context.Context, dsn string, limits config.DBLimits, logger *zap.Logger) (*sql.DB, error) {
-	logger.Info("DB init started",
+	log := logger.With(
 		zap.String("component", "repository"),
 		zap.String("operation", "init_db"),
 	)
+
+	log.Info("DB init started")
 
 	if err := migrations.RunMigrations(dsn, logger); err != nil {
 		// Error is logged inside migrations. Avoid duplicates here.
@@ -25,11 +27,7 @@ func InitDB(ctx context.Context, dsn string, limits config.DBLimits, logger *zap
 
 	db, err := sql.Open("pgx", dsn)
 	if err != nil {
-		logger.Error("DB init failed",
-			zap.String("component", "repository"),
-			zap.String("operation", "init_db"),
-			zap.Error(err),
-		)
+		log.Error("DB open failed", zap.Error(err))
 		return nil, fmt.Errorf("open db connection: %w", err)
 	}
 
@@ -37,11 +35,7 @@ func InitDB(ctx context.Context, dsn string, limits config.DBLimits, logger *zap
 	defer cancel()
 
 	if err := db.PingContext(dbCtx); err != nil {
-		logger.Error("DB init failed",
-			zap.String("component", "repository"),
-			zap.String("operation", "init_db"),
-			zap.Error(err),
-		)
+		log.Error("DB ping failed", zap.Error(err))
 		db.Close()
 		return nil, fmt.Errorf("ping db: %w", err)
 	}
@@ -51,10 +45,7 @@ func InitDB(ctx context.Context, dsn string, limits config.DBLimits, logger *zap
 	db.SetConnMaxLifetime(limits.MaxLifeTime)
 	db.SetConnMaxIdleTime(limits.MaxIdleTime)
 
-	logger.Info("DB connected",
-		zap.String("component", "repository"),
-		zap.String("operation", "init_db"),
-	)
+	log.Info("DB connected")
 
 	return db, nil
 }
