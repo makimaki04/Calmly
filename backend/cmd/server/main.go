@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"log"
 	"os"
 
 	"github.com/makimaki04/Calmly/internal/database"
@@ -16,7 +18,11 @@ func main() {
 
 	appLogger, err := logger.InitLogger(cfgPath)
 	if err != nil {
-		bootstrap, _ := zap.NewProduction()
+		bootstrap, btErr := zap.NewProduction()
+		if btErr != nil {
+			log.Fatal("Logger init failed")
+		}
+
 		bootstrap.Error("Logger init failed",
 			zap.String("component", "service"),
 			zap.String("operation", "init_logger"),
@@ -34,10 +40,10 @@ func main() {
 		zap.String("operation", "init_logger"),
 	)
 
-	db, err := database.InitDB("", appLogger)
+	db, err := database.InitDB(context.Background(), "", appLogger)
 	if err != nil {
+		// Error is logged inside repository layer (InitDB / migrations). Avoid duplicates here.
 		os.Exit(1)
 	}
-
-	_ = db
+	defer db.Close()
 }

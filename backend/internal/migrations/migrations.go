@@ -27,7 +27,7 @@ func RunMigrations(dsn string, logger *zap.Logger) error {
 			zap.String("operation", "run_migrations"),
 			zap.Error(err),
 		)
-		return fmt.Errorf("%w", err)
+		return fmt.Errorf("open migrations source: %w", err)
 	}
 
 	m, err := migrate.NewWithSourceInstance("iofs", d, dsn)
@@ -37,7 +37,7 @@ func RunMigrations(dsn string, logger *zap.Logger) error {
 			zap.String("operation", "run_migrations"),
 			zap.Error(err),
 		)
-		return fmt.Errorf("%w", err)
+		return fmt.Errorf("create migrator: %w", err)
 	}
 	defer func() {
 		srcErr, dbErr := m.Close()
