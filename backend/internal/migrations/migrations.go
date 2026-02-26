@@ -65,9 +65,21 @@ func RunMigrations(dsn string, logger *zap.Logger) error {
 				zap.String("operation", "run_migrations"),
 				zap.Error(err),
 			)
-			return fmt.Errorf("load migrations error: %w", err)
+			return fmt.Errorf("apply migrations: %w", err)
 		}
+
+		logger.Info("Migrations up to date",
+			zap.String("component", "repository"),
+			zap.String("operation", "run_migrations"),
+		)
+
+		return nil
 	}
+
+	logger.Info("Migrations applied",
+		zap.String("component", "repository"),
+		zap.String("operation", "run_migrations"),
+	)
 
 	return nil
 }

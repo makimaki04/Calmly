@@ -1,0 +1,45 @@
+# Binaries
+*.exe
+*.exe~
+*.exe.stackdump
+*.dll
+*.so
+*.dylib
+*.a
+*.o
+*.obj
+*.lib
+*.pdb
+*.ilk
+
+# Test binaries
+*.test
+
+# Coverage / profiling
+*.out
+coverage.*
+*.coverprofile
+
+# Logs
+logs/
+*.log
+tmp/
+*.bin
+
+# Go build cache
+bin/
+dist/
+
+# Vendor (если используешь)
+vendor/
+
+# IDE
+.idea/
+.vscode/
+
+# Env
+.env
+
+# OS
+.DS_Store
+Thumbs.db
