@@ -65,7 +65,6 @@ CREATE TABLE dumps (
     
     created_at timestamptz NOT NULL DEFAULT now(),
     updated_at timestamptz NOT NULL DEFAULT now(),
-    deleted_at timestamptz,
 
     CONSTRAINT dumps_owner_chk CHECK (
         (user_id IS NOT NULL AND guest_id IS NULL) OR (guest_id IS NOT NULL AND user_id IS NULL)
