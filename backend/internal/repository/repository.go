@@ -30,6 +30,12 @@ type DumpAnswers interface {
 }
 
 type Plan interface {
+	CreatePlan(ctx context.Context, plan models.Plan) (uuid.UUID, error)
+	GetPlans(ctx context.Context, dumpID uuid.UUID) ([]models.Plan, error)
+	SavePlan(ctx context.Context, planID uuid.UUID) (error)
+	DeleteUnsavedPlans(ctx context.Context, dumpID uuid.UUID) error
+	GetSavedPlans(ctx context.Context, userID uuid.UUID) ([]models.Plan, error)
+	DeleteSavedPlan(ctx context.Context, planID uuid.UUID) error
 }
 
 type PlanItem interface {
@@ -47,7 +53,8 @@ func NewRepository(db *sql.DB, logger *zap.Logger) *Repository {
 	return &Repository{
 		Dump:         NewDumpRepo(db, logger),
 		DumpAnalysis: NewDumpAnalysisRepo(db, logger),
-		DumpAnswers: NewDumpAnswersRepo(db, logger),
+		DumpAnswers:  NewDumpAnswersRepo(db, logger),
+		Plan:         NewPlanRepo(db, logger),
 	}
 }
 
