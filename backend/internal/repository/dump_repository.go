@@ -16,7 +16,7 @@ type DumpRepository struct {
 	logger *zap.Logger
 }
 
-func NewDumpRepository(db *sql.DB, logger *zap.Logger) *DumpRepository {
+func NewDumpRepo(db *sql.DB, logger *zap.Logger) *DumpRepository {
 	return &DumpRepository{
 		db:     db,
 		logger: logger.With(zap.String("component", "repository")),
