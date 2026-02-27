@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/makimaki04/Calmly/internal/models"
+	"go.uber.org/zap"
 )
 
 type Dump interface {
@@ -19,6 +20,8 @@ type Dump interface {
 }
 
 type DumpAnalysis interface {
+	SaveAnalysis(ctx context.Context, dumpAnalysis models.DumpAnalysis) error
+	GetAnalysis(ctx context.Context, dumpID uuid.UUID) (*models.DumpAnalysis, error)
 }
 
 type DumpAnswers interface {
@@ -36,6 +39,13 @@ type Repository struct {
 	DumpAnswers
 	Plan
 	PlanItem
+}
+
+func NewRepository(db *sql.DB, logger *zap.Logger) *Repository {
+	return &Repository{
+		Dump:         NewDumpRepository(db, logger),
+		DumpAnalysis: NewDumpAnalysisRepo(db, logger),
+	}
 }
 
 var (

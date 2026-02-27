@@ -26,21 +26,21 @@ func NewDumpRepository(db *sql.DB, logger *zap.Logger) *DumpRepository {
 const (
 	insertDumpQuery = `
 		INSERT INTO dumps (
-		user_id, 
-		guest_id, 
-		status, 
-		raw_text, 
-		raw_text_expires_at, 
-		created_at, 
-		updated_at)
-		VALUES (
-		$1, 
-		$2, 
-		$3, 
-		$4, 
-		$5, 
-		now(), 
-		now()
+			user_id, 
+			guest_id, 
+			status, 
+			raw_text, 
+			raw_text_expires_at, 
+			created_at, 
+			updated_at
+		) VALUES (
+			$1, 
+			$2, 
+			$3, 
+			$4, 
+			$5, 
+			now(), 
+			now()
 		)
 		RETURNING id;
 	`
@@ -150,7 +150,7 @@ func (r *DumpRepository) GetActiveDump(ctx context.Context, userID uuid.UUID) (*
 			return nil, nil
 		}
 		log.Error("Get active dump failed", zap.Error(err))
-		return nil, fmt.Errorf("select active dump: %w", err)
+		return nil, fmt.Errorf("select active dump: %w", checkErr(err))
 	}
 
 	return &dump, nil

@@ -40,32 +40,32 @@ const (
 
 type DumpAnalysis struct {
 	DumpID    uuid.UUID
-	Tasks     []Task
-	Questions []Question
+	Tasks     []Task     `json:"tasks"`
+	Questions []Question `json:"questions"`
 	Mood      *Mood
 	Quote     *string
 	CreatedAt time.Time
 }
 
 type Task struct {
-	Text     string
-	Priority string
-	Category string
+	Text     string `json:"text"`
+	Priority string `json:"priority"`
+	Category string `json:"category"`
 }
 
 type Question struct {
-	Text string
+	Text string `json:"text"`
 }
 
 type DumpAnswers struct {
 	DumpID    uuid.UUID
-	Answers   []Answer
+	Answers   []Answer `json:"answers"`
 	CreatedAt time.Time
 }
 
 type Answer struct {
-	QuestionIdx int
-	Text        string
+	QuestionIdx int    `json:"question_idx"`
+	Text        string `json:"text"`
 }
 
 type Plan struct {
