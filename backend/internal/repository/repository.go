@@ -25,6 +25,8 @@ type DumpAnalysis interface {
 }
 
 type DumpAnswers interface {
+	SaveAnswers(ctx context.Context, answers models.DumpAnswers) error
+	GetAnswers(ctx context.Context, dumpID uuid.UUID) (*models.DumpAnswers, error)
 }
 
 type Plan interface {
@@ -43,8 +45,9 @@ type Repository struct {
 
 func NewRepository(db *sql.DB, logger *zap.Logger) *Repository {
 	return &Repository{
-		Dump:         NewDumpRepository(db, logger),
+		Dump:         NewDumpRepo(db, logger),
 		DumpAnalysis: NewDumpAnalysisRepo(db, logger),
+		DumpAnswers: NewDumpAnswersRepo(db, logger),
 	}
 }
 
