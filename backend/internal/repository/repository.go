@@ -17,6 +17,7 @@ type Dump interface {
 	UpdateStatus(ctx context.Context, dumpID uuid.UUID, status models.DumpStatus) error
 	ClearRawText(ctx context.Context, dumpID uuid.UUID) error
 	GetActiveDump(ctx context.Context, userID uuid.UUID) (*models.Dump, error)
+	ClearExpiredRawTexts(ctx context.Context) error
 }
 
 type DumpAnalysis interface {
@@ -32,13 +33,19 @@ type DumpAnswers interface {
 type Plan interface {
 	CreatePlan(ctx context.Context, plan models.Plan) (uuid.UUID, error)
 	GetPlans(ctx context.Context, dumpID uuid.UUID) ([]models.Plan, error)
-	SavePlan(ctx context.Context, planID uuid.UUID) (error)
+	SavePlan(ctx context.Context, planID uuid.UUID) error
 	DeleteUnsavedPlans(ctx context.Context, dumpID uuid.UUID) error
 	GetSavedPlans(ctx context.Context, userID uuid.UUID) ([]models.Plan, error)
 	DeleteSavedPlan(ctx context.Context, planID uuid.UUID) error
 }
 
 type PlanItem interface {
+	CreateItems(ctx context.Context, items []models.PlanItem) error
+	AddItem(ctx context.Context, item models.PlanItem) error
+	DeleteItem(ctx context.Context, itemID uuid.UUID) error
+	ToggleItem(ctx context.Context, itemID uuid.UUID, done bool) error
+	ReorderItems(ctx context.Context, planID uuid.UUID, itemsIDs []uuid.UUID) error
+	GetItemsByPlanIDs(ctx context.Context, planIDs []uuid.UUID) ([]models.PlanItem, error)
 }
 
 type Repository struct {
@@ -55,6 +62,7 @@ func NewRepository(db *sql.DB, logger *zap.Logger) *Repository {
 		DumpAnalysis: NewDumpAnalysisRepo(db, logger),
 		DumpAnswers:  NewDumpAnswersRepo(db, logger),
 		Plan:         NewPlanRepo(db, logger),
+		PlanItem: NewPlanItemRepo(db, logger),
 	}
 }
 
