@@ -16,6 +16,7 @@ type Config struct {
 	JWTSecret    string `env:"JWT_SECRET"`
 	LoggerConfig string `env:"LOGGER_CONFIG"`
 	DBConf       DBLimits
+	DumpExpTime  time.Duration `env:"DUMP_EXPTIME"`
 }
 
 type DBLimits struct {
@@ -46,6 +47,7 @@ func LoadAppConfig() (Config, error) {
 	flag.StringVar(&cfg.DatabaseURI, "db", cfg.DatabaseURI, "database uri")
 	flag.StringVar(&cfg.JWTSecret, "jwt-secret", cfg.JWTSecret, "jwt secret")
 	flag.StringVar(&cfg.LoggerConfig, "logger", cfg.LoggerConfig, "logger config path")
+	flag.DurationVar(&cfg.DumpExpTime, "dump-exptime", cfg.DumpExpTime, "dump expires time value in days")
 
 	flag.Parse()
 
@@ -75,6 +77,10 @@ func LoadAppConfig() (Config, error) {
 	// Apply defaults if limits were not provided.
 	if cfg.DBConf == (DBLimits{}) {
 		cfg.DBConf = dbLims
+	}
+
+	if cfg.DumpExpTime <= 0 {
+		cfg.DumpExpTime = 20 * 24 * time.Hour
 	}
 
 	return cfg, nil
