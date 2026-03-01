@@ -30,7 +30,7 @@ type PlanItem interface {
 	AddItem(ctx context.Context, item models.PlanItem) error
 	DeleteItem(ctx context.Context, itemID uuid.UUID) error
 	ReorderItems(ctx context.Context, planID uuid.UUID, itemIDs []uuid.UUID) error
-	GetItemsByPlanIDs(ctx context.Context, planIDs []uuid.UUID) ([]models.PlanItem, error) 
+	GetItemsByPlanIDs(ctx context.Context, planIDs []uuid.UUID) ([]models.PlanItem, error)
 }
 
 type Service struct {

@@ -203,7 +203,7 @@ func (r *PlanItemRepository) ReorderItems(ctx context.Context, planID uuid.UUID,
 
 		if err != nil {
 			_ = tx.Rollback()
-			return 
+			return
 		}
 
 		if commitErr := tx.Commit(); commitErr != nil {

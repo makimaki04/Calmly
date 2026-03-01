@@ -62,7 +62,7 @@ func NewRepository(db *sql.DB, logger *zap.Logger) *Repository {
 		DumpAnalysis: NewDumpAnalysisRepo(db, logger),
 		DumpAnswers:  NewDumpAnswersRepo(db, logger),
 		Plan:         NewPlanRepo(db, logger),
-		PlanItem: NewPlanItemRepo(db, logger),
+		PlanItem:     NewPlanItemRepo(db, logger),
 	}
 }
 
