@@ -15,6 +15,8 @@ type PlanCleaner interface {
 	DeleteUnsavedPlans(ctx context.Context, dumpID uuid.UUID) error
 }
 
+// DumpService delegates to repository which owns error logging.
+// This layer only wraps and propagates errors — no duplicate logs.
 type DumpService struct {
 	repo        repository.Dump
 	planCleaner PlanCleaner
@@ -37,7 +39,6 @@ func (s *DumpService) CreateDump(ctx context.Context, userID uuid.UUID, rawText 
 
 	activeDump, err := s.repo.GetActiveDump(ctx, userID)
 	if err != nil {
-		// Error is logged inside repository. Avoid duplicates here.
 		return uuid.UUID{}, fmt.Errorf("get active dump: %w", err)
 	}
 
