@@ -68,6 +68,17 @@ const (
 		ORDER BY updated_at DESC 
 		LIMIT 1;
 	`
+	clearExpiredRawTextsQuery = `
+		UPDATE dumps
+		SET
+		raw_text = NULL,
+		raw_text_deleted_at = now(),
+		status = CASE
+				WHEN status NOT IN ('abandoned', 'planned') THEN 'abandoned'
+				ELSE status
+			END
+		WHERE raw_text IS NOT NULL AND raw_text_expires_at <= now();
+	`
 )
 
 func (r *DumpRepository) CreateDump(ctx context.Context, dump models.Dump) (uuid.UUID, error) {
@@ -122,6 +133,21 @@ func (r *DumpRepository) ClearRawText(ctx context.Context, dumpID uuid.UUID) err
 	}
 
 	log.Info("Raw text cleared")
+
+	return nil
+}
+
+func (r *DumpRepository) ClearExpiredRawTexts(ctx context.Context) error {
+	log := r.logger.With(zap.String("operation", "clear_expired_raw_texts"))
+
+	_, err := r.db.ExecContext(ctx, clearExpiredRawTextsQuery)
+	if err != nil {
+		log.Error("Clear expired raw texts failed", zap.Error(err))
+		err = fmt.Errorf("clear expired raw texts: %w", checkErr(err))
+		return err
+	}
+
+	log.Info("Expired raw texts cleared")
 
 	return nil
 }
