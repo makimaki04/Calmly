@@ -1,6 +1,7 @@
 DROP INDEX IF EXISTS plan_items_plan_id_idx;
 
 DROP INDEX IF EXISTS plans_dump_id_created_at_idx;
+DROP INDEX IF EXISTS plans_one_saved_per_dump_uq;
 
 DROP INDEX IF EXISTS dumps_raw_text_expires_at_idx;
 DROP INDEX IF EXISTS dumps_guest_created_at_idx;

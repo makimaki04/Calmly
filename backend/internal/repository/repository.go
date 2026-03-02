@@ -32,9 +32,8 @@ type DumpAnswers interface {
 
 type Plan interface {
 	CreatePlan(ctx context.Context, plan models.Plan) (uuid.UUID, error)
-	GetPlans(ctx context.Context, dumpID uuid.UUID) ([]models.Plan, error)
-	SavePlan(ctx context.Context, planID uuid.UUID) error
-	DeleteUnsavedPlans(ctx context.Context, dumpID uuid.UUID) error
+	GetPlansByDumpID(ctx context.Context, dumpID uuid.UUID) ([]models.Plan, error)
+	FinalizeSelectedPlan(ctx context.Context, dumpID uuid.UUID, planID uuid.UUID) error
 	GetSavedPlans(ctx context.Context, userID uuid.UUID) ([]models.Plan, error)
 	DeleteSavedPlan(ctx context.Context, planID uuid.UUID) error
 }
@@ -77,6 +76,8 @@ var (
 	ErrSchemaMismatch = errors.New("schema mismatch")
 	// ErrNotFound is returned when an item can't be found.
 	ErrNotFound = errors.New("item not found")
+	// ErrUniqueViolation is returned when an operation violates a uniqueness constraint.
+	ErrUniqueViolation = errors.New("unique constraint violation")
 	// ErrDB is returned for non-specific database errors.
 	ErrDB = errors.New("db error")
 )
@@ -100,6 +101,8 @@ func checkErr(err error) error {
 	switch pgErr.Code {
 	case pgerrcode.ForeignKeyViolation:
 		return ErrForeignKeyViolation
+	case pgerrcode.UniqueViolation:
+		return ErrUniqueViolation
 	case pgerrcode.NotNullViolation:
 		return ErrDB
 	case pgerrcode.InvalidTextRepresentation:

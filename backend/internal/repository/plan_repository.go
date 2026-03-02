@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -35,6 +36,11 @@ const (
 		)
 		RETURNING id;
 	`
+	findPlanByDumpID = `
+		SELECT id
+		FROM plans
+		WHERE id = $1 AND dump_id = $2 AND deleted_at IS NULL;
+	`
 	selectPlansByDumpIDQuery = `
 		SELECT id, dump_id, title, created_at, saved_at, deleted_at
 		FROM plans
@@ -44,11 +50,15 @@ const (
 		UPDATE plans
 		SET 
 		saved_at = now()
-		WHERE id = $1;
+		WHERE id = $1
+			AND deleted_at IS NULL
+			AND saved_at IS NULL;
 	`
-	deleteUnsavePlansByDumpIDquery = `
+	deleteUnsavedPlansByDumpIDquery = `
 		DELETE FROM plans
-		WHERE dump_id = $1 AND saved_at IS NULL;
+		WHERE dump_id = $1
+			AND id <> $2
+			AND saved_at IS NULL;
 	`
 	selectSavedPlansQuery = `
 		SELECT p.id, p.dump_id, p.title, p.created_at
@@ -71,6 +81,8 @@ func (r *PlanRepository) CreatePlan(ctx context.Context, plan models.Plan) (uuid
 		zap.String("dump_id", plan.DumpID.String()),
 	)
 
+	log.Info("Create plan started")
+
 	var id uuid.UUID
 
 	err := r.db.QueryRowContext(ctx, insertPlanQuery, plan.DumpID, plan.Title).Scan(&id)
@@ -84,11 +96,13 @@ func (r *PlanRepository) CreatePlan(ctx context.Context, plan models.Plan) (uuid
 	return id, nil
 }
 
-func (r *PlanRepository) GetPlans(ctx context.Context, dumpID uuid.UUID) ([]models.Plan, error) {
+func (r *PlanRepository) GetPlansByDumpID(ctx context.Context, dumpID uuid.UUID) ([]models.Plan, error) {
 	log := r.logger.With(
 		zap.String("operation", "get_plans"),
 		zap.String("dump_id", dumpID.String()),
 	)
+
+	log.Info("Get plans started")
 
 	rows, err := r.db.QueryContext(ctx, selectPlansByDumpIDQuery, dumpID)
 	if err != nil {
@@ -123,16 +137,94 @@ func (r *PlanRepository) GetPlans(ctx context.Context, dumpID uuid.UUID) ([]mode
 	return plans, nil
 }
 
-func (r *PlanRepository) SavePlan(ctx context.Context, planID uuid.UUID) error {
+func (r *PlanRepository) FinalizeSelectedPlan(ctx context.Context, dumpID uuid.UUID, planID uuid.UUID) (err error) {
+	log := r.logger.With(
+		zap.String("operation", "finalize_selected_plan"),
+		zap.String("plan_id", planID.String()),
+		zap.String("dump_id", dumpID.String()),
+	)
+
+	log.Info("Finalize selected plan started")
+
+	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{})
+	if err != nil {
+		log.Error("Begin tx failed", zap.Error(err))
+		return fmt.Errorf("begin tx: %w", checkErr(err))
+	}
+
+	defer func() {
+		if p := recover(); p != nil {
+			_ = tx.Rollback()
+			panic(p)
+		}
+
+		if err != nil {
+			_ = tx.Rollback()
+			return
+		}
+
+		if commitErr := tx.Commit(); commitErr != nil {
+			_ = tx.Rollback()
+			log.Error("Commit tx failed", zap.Error(commitErr))
+			err = fmt.Errorf("commit tx: %w", commitErr)
+		}
+	}()
+
+	err = r.ensurePlanBelongsToDump(ctx, tx, dumpID, planID)
+	if err != nil {
+		log.Error("Validate plan ownership failed", zap.Error(err))
+		return fmt.Errorf("ensure plan belongs to dump: %w", err)
+	}
+
+	err = r.markPlanSaved(ctx, tx, planID)
+	if err != nil {
+		log.Error("Mark plan saved failed", zap.Error(err))
+		return fmt.Errorf("mark plan saved: %w", err)
+	}
+
+	err = r.deleteUnsavedPlans(ctx, tx, dumpID, planID)
+	if err != nil {
+		log.Error("Delete unsaved plans failed", zap.Error(err))
+		return fmt.Errorf("delete unsaved plans: %w", err)
+	}
+
+	return nil
+}
+
+func (r *PlanRepository) ensurePlanBelongsToDump(
+	ctx context.Context,
+	tx *sql.Tx,
+	dumpID uuid.UUID,
+	planID uuid.UUID,
+) error {
+	var id uuid.UUID
+	if err := tx.QueryRowContext(ctx, findPlanByDumpID, planID, dumpID).Scan(&id); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNotFound
+		}
+
+		return fmt.Errorf("find plan by dump id: %w", checkErr(err))
+	}
+
+	return nil
+}
+
+var ErrPlanNotUpdated = errors.New("plan was not updated")
+
+func (r *PlanRepository) markPlanSaved(ctx context.Context, tx *sql.Tx, planID uuid.UUID) error {
 	log := r.logger.With(
 		zap.String("operation", "save_plan"),
 		zap.String("plan_id", planID.String()),
 	)
 
-	_, err := r.db.ExecContext(ctx, updateSavedPlanQuery, planID)
+	res, err := tx.ExecContext(ctx, updateSavedPlanQuery, planID)
 	if err != nil {
 		log.Error("Save plan failed", zap.Error(err))
 		return fmt.Errorf("update plan saved_at: %w", checkErr(err))
+	}
+
+	if rows, _ := res.RowsAffected(); rows != 1 {
+		return ErrPlanNotUpdated
 	}
 
 	log.Info("Plan saved")
@@ -140,13 +232,15 @@ func (r *PlanRepository) SavePlan(ctx context.Context, planID uuid.UUID) error {
 	return nil
 }
 
-func (r *PlanRepository) DeleteUnsavedPlans(ctx context.Context, dumpID uuid.UUID) error {
+func (r *PlanRepository) deleteUnsavedPlans(ctx context.Context, tx *sql.Tx, dumpID uuid.UUID, selectedPlanID uuid.UUID) error {
 	log := r.logger.With(
 		zap.String("operation", "delete_unsaved_plans"),
 		zap.String("dump_id", dumpID.String()),
 	)
 
-	_, err := r.db.ExecContext(ctx, deleteUnsavePlansByDumpIDquery, dumpID)
+	log.Info("Delete unsaved plans started")
+
+	_, err := tx.ExecContext(ctx, deleteUnsavedPlansByDumpIDquery, dumpID, selectedPlanID)
 	if err != nil {
 		log.Error("Delete unsaved plans failed", zap.Error(err))
 		return fmt.Errorf("delete unsaved plans: %w", checkErr(err))
@@ -160,6 +254,8 @@ func (r *PlanRepository) GetSavedPlans(ctx context.Context, userID uuid.UUID) ([
 		zap.String("operation", "get_saved_plans"),
 		zap.String("user_id", userID.String()),
 	)
+
+	log.Info("Get saved plans started")
 
 	rows, err := r.db.QueryContext(ctx, selectSavedPlansQuery, userID)
 	if err != nil {
@@ -197,6 +293,8 @@ func (r *PlanRepository) DeleteSavedPlan(ctx context.Context, planID uuid.UUID) 
 		zap.String("operation", "delete_saved_plan"),
 		zap.String("plan_id", planID.String()),
 	)
+
+	log.Info("Delete saved plan started")
 
 	_, err := r.db.ExecContext(ctx, deleteSavedPlanQuery, planID)
 	if err != nil {
