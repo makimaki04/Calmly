@@ -44,12 +44,8 @@ func (s *PlanService) SavePlan(ctx context.Context, dumpID uuid.UUID, planID uui
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	if err := s.repo.SavePlan(ctx, planID); err != nil {
+	if err := s.repo.FinalizeSelectedPlan(ctx, dumpID, planID); err != nil {
 		return fmt.Errorf("save plan: %w", err)
-	}
-
-	if err := s.DeleteUnsavedPlans(ctx, dumpID); err != nil {
-		return fmt.Errorf("cleanup unsaved plans: %w", err)
 	}
 
 	return nil
@@ -59,7 +55,7 @@ func (s *PlanService) GetDumpPlans(ctx context.Context, dumpID uuid.UUID) ([]mod
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	plans, err := s.repo.GetPlans(ctx, dumpID)
+	plans, err := s.repo.GetPlansByDumpID(ctx, dumpID)
 	if err != nil {
 		return nil, fmt.Errorf("get dump plans: %w", err)
 	}
@@ -85,14 +81,6 @@ func (s *PlanService) DeleteSavedPlan(ctx context.Context, planID uuid.UUID) err
 
 	if err := s.repo.DeleteSavedPlan(ctx, planID); err != nil {
 		return fmt.Errorf("delete saved plan: %w", err)
-	}
-
-	return nil
-}
-
-func (s *PlanService) DeleteUnsavedPlans(ctx context.Context, dumpID uuid.UUID) error {
-	if err := s.repo.DeleteUnsavedPlans(ctx, dumpID); err != nil {
-		return fmt.Errorf("delete unsaved plans: %w", err)
 	}
 
 	return nil

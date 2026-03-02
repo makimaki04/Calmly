@@ -36,17 +36,17 @@ const (
 	deleteItemQuery = `
 		UPDATE plan_items
 		SET deleted_at = now()
-		WHERE id = $1;
+		WHERE id = $1 AND deleted_at IS NULL;;
 	`
 	toggleItemQuery = `
 		UPDATE plan_items
 		SET done = $2
-		WHERE id = $1;
+		WHERE id = $1 AND deleted_at IS NULL;
 	`
 	updateItemsOrderQuery = `
 		UPDATE plan_items
 		SET ord = $3
-		WHERE id = $1 AND plan_id = $2;
+		WHERE id = $1 AND plan_id = $2 AND deleted_at IS NULL;;
 	`
 	getItemsByPlanIdsQuery = `
 		SELECT id, plan_id, ord, text, done, created_at
@@ -56,7 +56,7 @@ const (
 	`
 )
 
-func (r *PlanItemRepository) CreateItems(ctx context.Context, items []models.PlanItem) error {
+func (r *PlanItemRepository) CreateItems(ctx context.Context, items []models.PlanItem) (err error) {
 	if len(items) == 0 {
 		return nil
 	}
@@ -183,7 +183,7 @@ func (r *PlanItemRepository) ToggleItem(ctx context.Context, itemID uuid.UUID, d
 	return nil
 }
 
-func (r *PlanItemRepository) ReorderItems(ctx context.Context, planID uuid.UUID, itemsIDs []uuid.UUID) error {
+func (r *PlanItemRepository) ReorderItems(ctx context.Context, planID uuid.UUID, itemsIDs []uuid.UUID) (err error) {
 	log := r.logger.With(
 		zap.String("operation", "reorder_items"),
 		zap.String("plan_id", planID.String()),

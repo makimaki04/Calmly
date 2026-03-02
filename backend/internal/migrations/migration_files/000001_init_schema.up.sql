@@ -127,6 +127,11 @@ CREATE TABLE plans (
 
 CREATE INDEX plans_dump_id_created_at_idx ON plans(dump_id, created_at DESC);
 
+CREATE UNIQUE INDEX plans_one_saved_per_dump_uq 
+ON plans(dump_id) 
+WHERE saved_at IS NOT NULL AND deleted_at IS NULL;
+
+
 CREATE TABLE plan_items (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     plan_id uuid REFERENCES plans(id) ON DELETE CASCADE,

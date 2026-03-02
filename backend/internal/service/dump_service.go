@@ -11,23 +11,17 @@ import (
 	"go.uber.org/zap"
 )
 
-type PlanCleaner interface {
-	DeleteUnsavedPlans(ctx context.Context, dumpID uuid.UUID) error
-}
-
 // DumpService delegates to repository which owns error logging.
 // This layer only wraps and propagates errors — no duplicate logs.
 type DumpService struct {
 	repo        repository.Dump
-	planCleaner PlanCleaner
 	dumpExpTime time.Duration
 	logger      *zap.Logger
 }
 
-func NewDumpService(repo repository.Dump, planCleaner PlanCleaner, dumpExpTime time.Duration, logger *zap.Logger) *DumpService {
+func NewDumpService(repo repository.Dump, dumpExpTime time.Duration, logger *zap.Logger) *DumpService {
 	return &DumpService{
 		repo:        repo,
-		planCleaner: planCleaner,
 		dumpExpTime: dumpExpTime,
 		logger:      logger.With(zap.String("component", "service")),
 	}
@@ -66,10 +60,6 @@ func (s *DumpService) CreateDump(ctx context.Context, userID uuid.UUID, rawText 
 func (s *DumpService) AbandonDump(ctx context.Context, dumpID uuid.UUID) error {
 	if err := s.repo.ClearRawText(ctx, dumpID); err != nil {
 		return fmt.Errorf("abandon dump: %w", err)
-	}
-
-	if err := s.planCleaner.DeleteUnsavedPlans(ctx, dumpID); err != nil {
-		return fmt.Errorf("delete unsaved plans: %w", err)
 	}
 
 	return nil

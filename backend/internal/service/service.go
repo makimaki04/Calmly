@@ -21,7 +21,6 @@ type Plan interface {
 	GetDumpPlans(ctx context.Context, dumpID uuid.UUID) ([]models.Plan, error)
 	GetUserSavedPlans(ctx context.Context, userID uuid.UUID) ([]models.Plan, error)
 	DeleteSavedPlan(ctx context.Context, planID uuid.UUID) error
-	DeleteUnsavedPlans(ctx context.Context, dumpID uuid.UUID) error
 }
 
 type PlanItem interface {
@@ -40,10 +39,9 @@ type Service struct {
 }
 
 func NewService(repo *repository.Repository, dumpExpTime time.Duration, logger *zap.Logger) *Service {
-	planSvc := NewPlanService(repo.Plan, logger)
 	return &Service{
-		Dump:     NewDumpService(repo.Dump, planSvc, dumpExpTime, logger),
-		Plan:     planSvc,
+		Dump:     NewDumpService(repo.Dump, dumpExpTime, logger),
+		Plan:     NewPlanService(repo.Plan, logger),
 		PlanItem: NewPlanItemService(repo.PlanItem, logger),
 	}
 }
