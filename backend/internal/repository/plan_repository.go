@@ -42,9 +42,9 @@ const (
 		WHERE id = $1 AND dump_id = $2 AND deleted_at IS NULL;
 	`
 	selectPlansByDumpIDQuery = `
-		SELECT id, dump_id, title, created_at, saved_at, deleted_at
+		SELECT id, dump_id, title, created_at, saved_at
 		FROM plans
-		WHERE dump_id = $1
+		WHERE dump_id = $1 AND deleted_at IS NULL;
 	`
 	updateSavedPlanQuery = `
 		UPDATE plans
@@ -96,7 +96,7 @@ func (r *PlanRepository) CreatePlan(ctx context.Context, plan models.Plan) (uuid
 	return id, nil
 }
 
-func (r *PlanRepository) GetPlansByDumpID(ctx context.Context, dumpID uuid.UUID) ([]models.Plan, error) {
+func (r *PlanRepository) GetCurrentSessionsPlans(ctx context.Context, dumpID uuid.UUID) ([]models.Plan, error) {
 	log := r.logger.With(
 		zap.String("operation", "get_plans"),
 		zap.String("dump_id", dumpID.String()),

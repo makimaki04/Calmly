@@ -90,6 +90,11 @@ CREATE INDEX dumps_user_created_idx ON dumps(user_id, created_at DESC);
 CREATE INDEX dumps_guest_created_at_idx ON dumps(guest_id, created_at DESC);
 CREATE INDEX dumps_raw_text_expires_at_idx ON dumps(raw_text_expires_at) WHERE raw_text_expires_at IS NOT NULL;
 
+CREATE UNIQUE INDEX dump_one_active_per_user_uq 
+ON dumps(user_id) 
+WHERE user_id IS NOT NULL 
+    AND status <> 'planned' AND status <> 'abandoned';
+
 CREATE TYPE mood AS enum (
     'overwhelmed',
     'anxious',
