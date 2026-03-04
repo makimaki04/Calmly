@@ -55,7 +55,7 @@ func (s *PlanService) GetDumpPlans(ctx context.Context, dumpID uuid.UUID) ([]mod
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	plans, err := s.repo.GetPlansByDumpID(ctx, dumpID)
+	plans, err := s.repo.GetCurrentSessionsPlans(ctx, dumpID)
 	if err != nil {
 		return nil, fmt.Errorf("get dump plans: %w", err)
 	}

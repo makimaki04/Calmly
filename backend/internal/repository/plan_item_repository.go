@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -36,17 +37,26 @@ const (
 	deleteItemQuery = `
 		UPDATE plan_items
 		SET deleted_at = now()
-		WHERE id = $1 AND deleted_at IS NULL;;
+		WHERE id = $1 AND deleted_at IS NULL;
 	`
 	toggleItemQuery = `
 		UPDATE plan_items
 		SET done = $2
 		WHERE id = $1 AND deleted_at IS NULL;
 	`
-	updateItemsOrderQuery = `
+	offsetItemsOrdQuery = `
 		UPDATE plan_items
-		SET ord = $3
-		WHERE id = $1 AND plan_id = $2 AND deleted_at IS NULL;;
+		SET ord = ord + 1000000
+		WHERE plan_id = $1 AND id = ANY($2::uuid[]) AND deleted_at IS NULL;
+	`
+	updateItemsOrderQuery = `
+		UPDATE plan_items AS pi
+		SET ord = v.new_ord
+		FROM (
+			SELECT *
+			FROM unnest($2::uuid[], $3::int[]) AS t(id, new_ord)
+		) AS v
+		WHERE pi.plan_id = $1 AND pi.id = v.id AND deleted_at IS NULL;
 	`
 	getItemsByPlanIdsQuery = `
 		SELECT id, plan_id, ord, text, done, created_at
@@ -65,6 +75,8 @@ func (r *PlanItemRepository) CreateItems(ctx context.Context, items []models.Pla
 		zap.String("operation", "create_items"),
 		zap.String("plan_id", items[0].PlanID.String()),
 	)
+
+	log.Info("Create items started")
 
 	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{})
 	if err != nil {
@@ -108,6 +120,8 @@ func (r *PlanItemRepository) AddItem(ctx context.Context, item models.PlanItem) 
 		zap.String("plan_id", item.PlanID.String()),
 	)
 
+	log.Info("Add item started")
+
 	_, err := r.db.ExecContext(ctx, insertPlanItemQuery, item.PlanID, item.Ord, item.Text)
 	if err != nil {
 		log.Error("Add plan item failed", zap.Error(err))
@@ -119,6 +133,8 @@ func (r *PlanItemRepository) AddItem(ctx context.Context, item models.PlanItem) 
 
 func (r *PlanItemRepository) GetItemsByPlanIDs(ctx context.Context, planIDs []uuid.UUID) ([]models.PlanItem, error) {
 	log := r.logger.With(zap.String("operation", "get_items_by_plan_ids"))
+
+	log.Info("Get items by plan ids started")
 
 	rows, err := r.db.QueryContext(ctx, getItemsByPlanIdsQuery, planIDs)
 	if err != nil {
@@ -153,20 +169,31 @@ func (r *PlanItemRepository) GetItemsByPlanIDs(ctx context.Context, planIDs []uu
 	return items, nil
 }
 
+var ErrItemNotDeleted = errors.New("item was not deleted")
+
 func (r *PlanItemRepository) DeleteItem(ctx context.Context, itemID uuid.UUID) error {
 	log := r.logger.With(
 		zap.String("operation", "delete_item"),
 		zap.String("item_id", itemID.String()),
 	)
 
-	_, err := r.db.ExecContext(ctx, deleteItemQuery, itemID)
+	log.Info("Delete item started")
+
+	res, err := r.db.ExecContext(ctx, deleteItemQuery, itemID)
 	if err != nil {
 		log.Error("Delete plan item failed", zap.Error(err))
 		return fmt.Errorf("soft delete plan item: %w", checkErr(err))
 	}
 
+	if row, _ := res.RowsAffected(); row != 1 {
+		log.Error("Delete plan item failed", zap.Error(ErrItemNotDeleted))
+		return ErrItemNotDeleted
+	}
+
 	return nil
 }
+
+var ErrItemNotToggled = errors.New("item was not toggled")
 
 func (r *PlanItemRepository) ToggleItem(ctx context.Context, itemID uuid.UUID, done bool) error {
 	log := r.logger.With(
@@ -174,20 +201,32 @@ func (r *PlanItemRepository) ToggleItem(ctx context.Context, itemID uuid.UUID, d
 		zap.String("item_id", itemID.String()),
 	)
 
-	_, err := r.db.ExecContext(ctx, toggleItemQuery, itemID, done)
+	log.Info("Toggle item started")
+
+	res, err := r.db.ExecContext(ctx, toggleItemQuery, itemID, done)
 	if err != nil {
 		log.Error("Toggle plan item failed", zap.Error(err))
 		return fmt.Errorf("toggle plan item: %w", checkErr(err))
 	}
 
+	if row, _ := res.RowsAffected(); row != 1 {
+		log.Error("Toggle plan item failed", zap.Error(ErrItemNotToggled))
+		return ErrItemNotToggled
+	}
+
 	return nil
 }
+
+var ErrItemsNotOffset = errors.New("failed to offset items")
+var ErrItemsNotReordered = errors.New("failed to reorder items")
 
 func (r *PlanItemRepository) ReorderItems(ctx context.Context, planID uuid.UUID, itemsIDs []uuid.UUID) (err error) {
 	log := r.logger.With(
 		zap.String("operation", "reorder_items"),
 		zap.String("plan_id", planID.String()),
 	)
+
+	log.Info("Reorder items started")
 
 	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{})
 	if err != nil {
@@ -213,14 +252,31 @@ func (r *PlanItemRepository) ReorderItems(ctx context.Context, planID uuid.UUID,
 		}
 	}()
 
-	for i, itemID := range itemsIDs {
-		ord := i + 1
-		_, err = tx.ExecContext(ctx, updateItemsOrderQuery, itemID, planID, ord)
-		if err != nil {
-			log.Error("Reorder plan item failed", zap.String("item_id", itemID.String()), zap.Error(err))
-			err = fmt.Errorf("update plan item order: %w", checkErr(err))
-			return err
-		}
+	res, err := tx.ExecContext(ctx, offsetItemsOrdQuery, planID, itemsIDs)
+	if err != nil {
+		log.Error("Offset plan item order failed", zap.Error(err))
+		return fmt.Errorf("offset plan item order: %w", checkErr(err))
+	}
+
+	if row, _ := res.RowsAffected(); row != int64(len(itemsIDs)) {
+		log.Error("Reorder plan items failed", zap.Error(ErrItemsNotOffset))
+		return ErrItemsNotOffset
+	}
+
+	var newOrd []int
+	for i := 0; i < len(itemsIDs); i++ {
+		newOrd = append(newOrd, i+1)
+	}
+
+	res, err = tx.ExecContext(ctx, updateItemsOrderQuery, planID, itemsIDs, newOrd)
+	if err != nil {
+		log.Error("Update plan item order failed", zap.Error(err))
+		return fmt.Errorf("update plan item order: %w", checkErr(err))
+	}
+
+	if row, _ := res.RowsAffected(); row != int64(len(itemsIDs)) {
+		log.Error("Reorder plan items failed", zap.Error(ErrItemsNotReordered))
+		return ErrItemsNotReordered
 	}
 
 	return nil

@@ -6,6 +6,7 @@ DROP INDEX IF EXISTS plans_one_saved_per_dump_uq;
 DROP INDEX IF EXISTS dumps_raw_text_expires_at_idx;
 DROP INDEX IF EXISTS dumps_guest_created_at_idx;
 DROP INDEX IF EXISTS dumps_user_created_idx;
+DROP INDEX IF EXISTS dump_one_active_per_user_uq;
 
 DROP INDEX IF EXISTS refresh_sessions_expires_at_idx;
 DROP INDEX IF EXISTS refresh_sessions_user_id_idx;
