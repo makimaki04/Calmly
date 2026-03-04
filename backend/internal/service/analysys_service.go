@@ -13,13 +13,13 @@ import (
 // AnalysisService delegates to repository which owns error logging.
 // This layer only wraps and propagates errors — no duplicate logs.
 type AnalysisService struct {
-	db     repository.DumpAnalysis
+	repo     repository.DumpAnalysis
 	logger *zap.Logger
 }
 
-func NewAnalyzeService(db repository.DumpAnalysis, logger *zap.Logger) *AnalysisService {
+func NewAnalyzeService(repo repository.DumpAnalysis, logger *zap.Logger) *AnalysisService {
 	return &AnalysisService{
-		db:     db,
+		repo:     repo,
 		logger: logger.With(zap.String("component", "service")),
 	}
 }
@@ -28,7 +28,7 @@ func (s *AnalysisService) SaveDumpAnalysis(ctx context.Context, analysis models.
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	if err := s.db.SaveAnalysis(ctx, analysis); err != nil {
+	if err := s.repo.SaveAnalysis(ctx, analysis); err != nil {
 		return err
 	}
 
@@ -39,13 +39,13 @@ func (s *AnalysisService) GetDumpAnalysis(ctx context.Context, dumpID uuid.UUID)
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	analysis, err := s.db.GetAnalysis(ctx, dumpID)
+	analysis, err := s.repo.GetAnalysis(ctx, dumpID)
 	if err != nil {
 		return nil, err
 	}
 
 	if analysis == nil {
-		//if dump status analyzed should pull LLM
+		//if dump status analyzed should  LLM
 	}
 
 	return analysis, nil
