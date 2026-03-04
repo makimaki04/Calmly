@@ -20,6 +20,11 @@ type Analyze interface {
 	GetDumpAnalysis(ctx context.Context, dumpID uuid.UUID) (*models.DumpAnalysis, error)
 }
 
+type Answers interface {
+	SaveAnswers(ctx context.Context, answers models.DumpAnswers) error
+	GetAnswers(ctx context.Context, dumpID uuid.UUID) (*models.DumpAnswers, error)
+}
+
 type Plan interface {
 	CreatePlan(ctx context.Context, dumpID uuid.UUID, title string) (uuid.UUID, error)
 	SavePlan(ctx context.Context, dumpID uuid.UUID, planID uuid.UUID) error
@@ -42,6 +47,7 @@ type Service struct {
 	Analyze
 	Plan
 	PlanItem
+	Answers
 }
 
 func NewService(repo *repository.Repository, dumpExpTime time.Duration, logger *zap.Logger) *Service {
@@ -50,5 +56,6 @@ func NewService(repo *repository.Repository, dumpExpTime time.Duration, logger *
 		Analyze:  NewAnalyzeService(repo.DumpAnalysis, logger),
 		Plan:     NewPlanService(repo.Plan, logger),
 		PlanItem: NewPlanItemService(repo.PlanItem, logger),
+		Answers:  NewAnswerService(repo.DumpAnswers, logger),
 	}
 }
