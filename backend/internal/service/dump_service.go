@@ -57,6 +57,29 @@ func (s *DumpService) CreateDump(ctx context.Context, userID uuid.UUID, rawText 
 	return id, nil
 }
 
+func (s *DumpService) GetUserDump(ctx context.Context, userID uuid.UUID) (*models.Dump, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	dump, err := s.repo.GetActiveDump(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	return dump, nil
+}
+
+func (s *DumpService) SetDumpStatus(ctx context.Context, dumpID uuid.UUID, status models.DumpStatus) error {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	if err := s.repo.UpdateStatus(ctx, dumpID, status); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (s *DumpService) AbandonDump(ctx context.Context, dumpID uuid.UUID) error {
 	if err := s.repo.ClearRawText(ctx, dumpID); err != nil {
 		return fmt.Errorf("abandon dump: %w", err)
