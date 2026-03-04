@@ -12,10 +12,12 @@ import (
 
 type Dump interface {
 	CreateDump(ctx context.Context, userID uuid.UUID, rawText string) (uuid.UUID, error)
+	GetUserDump(ctx context.Context, userID uuid.UUID) (*models.Dump, error)
+	SetDumpStatus(ctx context.Context, dumpID uuid.UUID, status models.DumpStatus) error 
 	AbandonDump(ctx context.Context, dumpID uuid.UUID) error
 }
 
-type Analyze interface {
+type Analysis interface {
 	SaveDumpAnalysis(ctx context.Context, analysis models.DumpAnalysis) error
 	GetDumpAnalysis(ctx context.Context, dumpID uuid.UUID) (*models.DumpAnalysis, error)
 }
@@ -44,7 +46,7 @@ type PlanItem interface {
 
 type Service struct {
 	Dump
-	Analyze
+	Analysis
 	Plan
 	PlanItem
 	Answers
@@ -53,7 +55,7 @@ type Service struct {
 func NewService(repo *repository.Repository, dumpExpTime time.Duration, logger *zap.Logger) *Service {
 	return &Service{
 		Dump:     NewDumpService(repo.Dump, dumpExpTime, logger),
-		Analyze:  NewAnalyzeService(repo.DumpAnalysis, logger),
+		Analysis:  NewAnalyzeService(repo.DumpAnalysis, logger),
 		Plan:     NewPlanService(repo.Plan, logger),
 		PlanItem: NewPlanItemService(repo.PlanItem, logger),
 		Answers:  NewAnswerService(repo.DumpAnswers, logger),
