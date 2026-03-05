@@ -55,12 +55,12 @@ func (f *FlowService) StartSession(ctx context.Context, userID uuid.UUID, rawTex
 			},
 			{
 				Text:     "Task 2",
-				Priority: "hight",
+				Priority: "high",
 				Category: "mind",
 			},
 			{
 				Text:     "Task 3",
-				Priority: "hight",
+				Priority: "high",
 				Category: "life balance",
 			},
 		},
@@ -74,11 +74,11 @@ func (f *FlowService) StartSession(ctx context.Context, userID uuid.UUID, rawTex
 		CreatedAt: time.Now(),
 	}
 
-	if err := f.dumpSvc.SetDumpStatus(ctx, dumpID, models.DumpStatusAnalyzed); err != nil {
+	if err := f.analysisSvc.SaveDumpAnalysis(ctx, mockAnalysis); err != nil {
 		return models.DumpAnalysis{}, err
 	}
 
-	if err := f.analysisSvc.SaveDumpAnalysis(ctx, mockAnalysis); err != nil {
+	if err := f.dumpSvc.SetDumpStatus(ctx, dumpID, models.DumpStatusAnalyzed); err != nil {
 		return models.DumpAnalysis{}, err
 	}
 
@@ -156,7 +156,7 @@ func (f *FlowService) GenerateNextPlanCandidate(ctx context.Context, fb models.U
 	}
 
 	_ = planItems
-	// LLM generate new plan and plan_items here folowing user feedback and current plans and planItems
+	// LLM generate new plan and plan_items here following user feedback and current plans and planItems
 
 	newPlan := models.Plan{
 		DumpID: fb.DumpID,
