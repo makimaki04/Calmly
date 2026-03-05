@@ -149,32 +149,30 @@ func (f *FlowService) SubmitAnswers(ctx context.Context, userID uuid.UUID, answe
 
 	mockPlanItems := []models.PlanItem{
 		{
-			ID:     uuid.New(),
 			PlanID: planID,
 			Ord:    1,
 			Text:   "Make some food",
 			Done:   false,
 		},
 		{
-			ID:     uuid.New(),
 			PlanID: planID,
 			Ord:    2,
 			Text:   "Sleep",
 			Done:   false,
 		},
 		{
-			ID:     uuid.New(),
 			PlanID: planID,
 			Ord:    3,
 			Text:   "Gym",
 			Done:   false,
 		},
 	}
-	if err := f.planItemSvc.CreateItems(ctx, mockPlanItems); err != nil {
+	items, err := f.planItemSvc.CreateItems(ctx, mockPlanItems)
+	if err != nil {
 		return models.Plan{}, []models.PlanItem{}, err
 	}
 
-	return plan, mockPlanItems, nil
+	return plan, items, nil
 }
 
 func (f *FlowService) GenerateNextPlanCandidate(ctx context.Context, fb models.UserFeedback) (models.Plan, []models.PlanItem, error) {
@@ -207,12 +205,33 @@ func (f *FlowService) GenerateNextPlanCandidate(ctx context.Context, fb models.U
 	}
 	newPlan.ID = newPlanID
 
-	newPlanItems := []models.PlanItem{}
-	if err := f.planItemSvc.CreateItems(ctx, newPlanItems); err != nil {
+	mockPlanItems := []models.PlanItem{
+		{
+			PlanID: newPlan.ID,
+			Ord:    1,
+			Text:   "Wake up",
+			Done:   false,
+		},
+		{
+			PlanID: newPlan.ID,
+			Ord:    2,
+			Text:   "Football",
+			Done:   false,
+		},
+		{
+			PlanID: newPlan.ID,
+			Ord:    3,
+			Text:   "Home work",
+			Done:   false,
+		},
+	}
+
+	items, err := f.planItemSvc.CreateItems(ctx, mockPlanItems)
+	if err != nil {
 		return models.Plan{}, []models.PlanItem{}, err
 	}
 
-	return newPlan, newPlanItems, nil
+	return newPlan, items, nil
 }
 
 func (f *FlowService) FinalizePlanSelection(ctx context.Context, dumpID uuid.UUID, planID uuid.UUID) error {
