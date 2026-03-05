@@ -9,11 +9,11 @@ import (
 type DumpStatus string
 
 const (
-	DumpStatusNew            DumpStatus = "new"
-	DumpStatusAnalyzed       DumpStatus = "analyzed"
-	DumpStatusWaitingAnswers DumpStatus = "waiting_answers"
-	DumpStatusPlanned        DumpStatus = "planned"
-	DumpStatusAbandoned      DumpStatus = "abandoned"
+	DumpStatusNew             DumpStatus = "new"
+	DumpStatusWaitingAnalysis DumpStatus = "waiting_analysis"
+	DumpStatusWaitingAnswers  DumpStatus = "waiting_answers"
+	DumpStatusPlanned         DumpStatus = "planned"
+	DumpStatusAbandoned       DumpStatus = "abandoned"
 )
 
 type Dump struct {
@@ -58,8 +58,8 @@ type Question struct {
 }
 
 type DumpAnswers struct {
-	DumpID    uuid.UUID `json:"dump_id"`
-	Answers   []Answer  `json:"answers"`
+	DumpID    uuid.UUID
+	Answers   []Answer `json:"answers"`
 	CreatedAt time.Time
 }
 
@@ -69,8 +69,8 @@ type Answer struct {
 }
 
 type UserFeedback struct {
-	DumpID uuid.UUID `json:"dump_id"`
-	Text   string    `json:"text"`
+	DumpID uuid.UUID
+	Text   string
 }
 
 type Plan struct {
