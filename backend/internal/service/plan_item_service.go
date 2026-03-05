@@ -25,15 +25,16 @@ func NewPlanItemService(repo repository.PlanItem, logger *zap.Logger) *PlanItemS
 	}
 }
 
-func (s *PlanItemService) CreateItems(ctx context.Context, items []models.PlanItem) error {
+func (s *PlanItemService) CreateItems(ctx context.Context, items []models.PlanItem) ([]models.PlanItem, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	if err := s.repo.CreateItems(ctx, items); err != nil {
-		return fmt.Errorf("create items: %w", err)
+	items, err := s.repo.CreateItems(ctx, items)
+	if err != nil {
+		return nil, fmt.Errorf("create items: %w", err)
 	}
 
-	return nil
+	return items, nil
 }
 
 func (s *PlanItemService) ToggleItem(ctx context.Context, itemID uuid.UUID, done bool) error {
@@ -47,15 +48,16 @@ func (s *PlanItemService) ToggleItem(ctx context.Context, itemID uuid.UUID, done
 	return nil
 }
 
-func (s *PlanItemService) AddItem(ctx context.Context, item models.PlanItem) error {
+func (s *PlanItemService) AddItem(ctx context.Context, item models.PlanItem) (models.PlanItem, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	if err := s.repo.AddItem(ctx, item); err != nil {
-		return fmt.Errorf("add item: %w", err)
+	item, err := s.repo.AddItem(ctx, item)
+	if err != nil {
+		return models.PlanItem{}, fmt.Errorf("add item: %w", err)
 	}
 
-	return nil
+	return item, nil
 }
 
 func (s *PlanItemService) DeleteItem(ctx context.Context, itemID uuid.UUID) error {

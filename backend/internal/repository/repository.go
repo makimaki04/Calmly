@@ -39,8 +39,8 @@ type Plan interface {
 }
 
 type PlanItem interface {
-	CreateItems(ctx context.Context, items []models.PlanItem) error
-	AddItem(ctx context.Context, item models.PlanItem) error
+	CreateItems(ctx context.Context, items []models.PlanItem) ([]models.PlanItem, error)
+	AddItem(ctx context.Context, item models.PlanItem) (models.PlanItem, error)
 	DeleteItem(ctx context.Context, itemID uuid.UUID) error
 	ToggleItem(ctx context.Context, itemID uuid.UUID, done bool) error
 	ReorderItems(ctx context.Context, planID uuid.UUID, itemsIDs []uuid.UUID) error

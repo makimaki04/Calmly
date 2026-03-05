@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/makimaki04/Calmly/internal/models"
@@ -32,7 +33,8 @@ const (
 			$2,
 			$3,
 			now()
-		);
+		)
+		RETURNING id, created_at;
 	`
 	deleteItemQuery = `
 		UPDATE plan_items
@@ -66,9 +68,9 @@ const (
 	`
 )
 
-func (r *PlanItemRepository) CreateItems(ctx context.Context, items []models.PlanItem) (err error) {
+func (r *PlanItemRepository) CreateItems(ctx context.Context, items []models.PlanItem) (res []models.PlanItem, err error) {
 	if len(items) == 0 {
-		return nil
+		return make([]models.PlanItem, 0), nil
 	}
 
 	log := r.logger.With(
@@ -81,7 +83,7 @@ func (r *PlanItemRepository) CreateItems(ctx context.Context, items []models.Pla
 	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{})
 	if err != nil {
 		log.Error("Begin tx failed", zap.Error(err))
-		return fmt.Errorf("begin tx: %w", checkErr(err))
+		return make([]models.PlanItem, 0), fmt.Errorf("begin tx: %w", checkErr(err))
 	}
 
 	defer func() {
@@ -102,19 +104,26 @@ func (r *PlanItemRepository) CreateItems(ctx context.Context, items []models.Pla
 		}
 	}()
 
+	res = make([]models.PlanItem, 0, len(items))
 	for _, item := range items {
-		_, err = tx.ExecContext(ctx, insertPlanItemQuery, item.PlanID, item.Ord, item.Text)
+		var id uuid.UUID
+		var createdAt time.Time
+		err = tx.QueryRowContext(ctx, insertPlanItemQuery, item.PlanID, item.Ord, item.Text).Scan(&id, &createdAt)
 		if err != nil {
 			log.Error("Create plan item failed", zap.Error(err))
 			err = fmt.Errorf("insert plan item: %w", checkErr(err))
-			return err
+			return make([]models.PlanItem, 0), err
 		}
+
+		item.ID = id
+		item.CreatedAt = createdAt
+		res = append(res, item)
 	}
 
-	return nil
+	return res, nil
 }
 
-func (r *PlanItemRepository) AddItem(ctx context.Context, item models.PlanItem) error {
+func (r *PlanItemRepository) AddItem(ctx context.Context, item models.PlanItem) (models.PlanItem, error) {
 	log := r.logger.With(
 		zap.String("operation", "add_item"),
 		zap.String("plan_id", item.PlanID.String()),
@@ -122,13 +131,18 @@ func (r *PlanItemRepository) AddItem(ctx context.Context, item models.PlanItem) 
 
 	log.Info("Add item started")
 
-	_, err := r.db.ExecContext(ctx, insertPlanItemQuery, item.PlanID, item.Ord, item.Text)
+	var id uuid.UUID
+	var createdAt time.Time
+	err := r.db.QueryRowContext(ctx, insertPlanItemQuery, item.PlanID, item.Ord, item.Text).Scan(&id, &createdAt)
 	if err != nil {
 		log.Error("Add plan item failed", zap.Error(err))
-		return fmt.Errorf("insert plan item: %w", checkErr(err))
+		return models.PlanItem{}, fmt.Errorf("insert plan item: %w", checkErr(err))
 	}
 
-	return nil
+	item.ID = id
+	item.CreatedAt = createdAt
+
+	return item, nil
 }
 
 func (r *PlanItemRepository) GetItemsByPlanIDs(ctx context.Context, planIDs []uuid.UUID) ([]models.PlanItem, error) {
