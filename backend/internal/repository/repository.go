@@ -18,6 +18,7 @@ type Dump interface {
 	ClearRawText(ctx context.Context, dumpID uuid.UUID) error
 	GetActiveDump(ctx context.Context, userID uuid.UUID) (*models.Dump, error)
 	ClearExpiredRawTexts(ctx context.Context) error
+	CompleteAnalysisStep(ctx context.Context, dumpAnalysis models.DumpAnalysis) error
 }
 
 type DumpAnalysis interface {

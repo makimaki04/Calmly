@@ -87,3 +87,15 @@ func (s *DumpService) AbandonDump(ctx context.Context, dumpID uuid.UUID) error {
 
 	return nil
 }
+
+func (s *DumpService) CompleteAnalysisStep(ctx context.Context, dumpAnalysis models.DumpAnalysis) error {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	err := s.repo.CompleteAnalysisStep(ctx, dumpAnalysis)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}

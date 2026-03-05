@@ -15,6 +15,7 @@ type Dump interface {
 	GetUserDump(ctx context.Context, userID uuid.UUID) (*models.Dump, error)
 	SetDumpStatus(ctx context.Context, dumpID uuid.UUID, status models.DumpStatus) error
 	AbandonDump(ctx context.Context, dumpID uuid.UUID) error
+	CompleteAnalysisStep(ctx context.Context, dumpAnalysis models.DumpAnalysis) error
 }
 
 type Analysis interface {

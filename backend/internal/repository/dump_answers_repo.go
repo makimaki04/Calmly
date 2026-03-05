@@ -12,13 +12,13 @@ import (
 	"go.uber.org/zap"
 )
 
-type DumpAnswersRepo struct {
+type DumpAnswersRepository struct {
 	db     *sql.DB
 	logger *zap.Logger
 }
 
-func NewDumpAnswersRepo(db *sql.DB, logger *zap.Logger) *DumpAnswersRepo {
-	return &DumpAnswersRepo{
+func NewDumpAnswersRepo(db *sql.DB, logger *zap.Logger) *DumpAnswersRepository {
+	return &DumpAnswersRepository{
 		db:     db,
 		logger: logger.With(zap.String("component", "repository")),
 	}
@@ -43,7 +43,7 @@ const (
 	`
 )
 
-func (r *DumpAnswersRepo) SaveAnswers(ctx context.Context, answers models.DumpAnswers) error {
+func (r *DumpAnswersRepository) SaveAnswers(ctx context.Context, answers models.DumpAnswers) error {
 	log := r.logger.With(
 		zap.String("operation", "save_answers"),
 		zap.String("dump_id", answers.DumpID.String()),
@@ -66,7 +66,7 @@ func (r *DumpAnswersRepo) SaveAnswers(ctx context.Context, answers models.DumpAn
 	return nil
 }
 
-func (r *DumpAnswersRepo) GetAnswers(ctx context.Context, dumpID uuid.UUID) (*models.DumpAnswers, error) {
+func (r *DumpAnswersRepository) GetAnswers(ctx context.Context, dumpID uuid.UUID) (*models.DumpAnswers, error) {
 	log := r.logger.With(
 		zap.String("operation", "get_answers"),
 		zap.String("dump_id", dumpID.String()),
