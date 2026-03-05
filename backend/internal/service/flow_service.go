@@ -95,8 +95,13 @@ func (f *FlowService) SubmitAnswers(ctx context.Context, answers models.DumpAnsw
 	}
 
 	dumpID := answers.DumpID
+	analysis, err :=f.analysisSvc.GetDumpAnalysis(ctx, dumpID)
+	if err != nil {
+		return models.Plan{}, []models.PlanItem{}, err
+	}
 
-	// LLM generate plan here
+	_ = analysis
+	// LLM generate plan here using analysis and answers
 
 	plan := models.Plan{
 		DumpID: dumpID,
