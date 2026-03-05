@@ -1,0 +1,5 @@
+-- No-op rollback.
+-- PostgreSQL enum values cannot be removed safely with a simple ALTER TYPE ... DROP VALUE.
+-- This migration only adds a new value to dump_status in up.
+-- If rollback is required, it must be done via a dedicated data migration
+-- (recreate type, remap values, cast columns), which is intentionally not done here.
