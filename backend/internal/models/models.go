@@ -54,7 +54,8 @@ type Task struct {
 }
 
 type Question struct {
-	Text string `json:"text"`
+	ID   uuid.UUID `json:"id"`
+	Text string    `json:"text"`
 }
 
 type DumpAnswers struct {
@@ -64,8 +65,8 @@ type DumpAnswers struct {
 }
 
 type Answer struct {
-	QuestionIdx int    `json:"question_idx"`
-	Text        string `json:"text"`
+	QuestionID uuid.UUID    `json:"question_id"`
+	Text       string `json:"text"`
 }
 
 type UserFeedback struct {

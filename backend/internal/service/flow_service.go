@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
@@ -66,7 +67,16 @@ func (f *FlowService) StartSession(ctx context.Context, userID uuid.UUID, rawTex
 		},
 		Questions: []models.Question{
 			{
+				ID:   uuid.New(),
 				Text: "What's going on",
+			},
+			{
+				ID:   uuid.New(),
+				Text: "Another qusetion",
+			},
+			{
+				ID:   uuid.New(),
+				Text: "Question number 3",
 			},
 		},
 		Mood:      &mood,
@@ -89,28 +99,45 @@ func (f *FlowService) StartSession(ctx context.Context, userID uuid.UUID, rawTex
 	return mockAnalysis, nil
 }
 
+var (
+	ErrActiveDumpNotFound = errors.New("active session not found")
+	ErrDumpNotBelongUser  = errors.New("dump does not belong to current user session")
+	ErrAnalysisNotFound   = errors.New("invalid session state: analysis is missing")
+)
+
 func (f *FlowService) SubmitAnswers(ctx context.Context, userID uuid.UUID, answers models.DumpAnswers) (models.Plan, []models.PlanItem, error) {
+	activeDump, err := f.dumpSvc.GetUserDump(ctx, userID)
+	if err != nil {
+		return models.Plan{}, []models.PlanItem{}, err
+	}
+
+	if activeDump == nil {
+		return models.Plan{}, []models.PlanItem{}, ErrActiveDumpNotFound
+	}
+
+	if activeDump.ID != answers.DumpID {
+		return models.Plan{}, []models.PlanItem{}, ErrDumpNotBelongUser
+	}
+
+	analysis, err := f.analysisSvc.GetDumpAnalysis(ctx, activeDump.ID)
+	if err != nil {
+		return models.Plan{}, []models.PlanItem{}, err
+	}
+
+	if analysis == nil {
+		return models.Plan{}, []models.PlanItem{}, ErrAnalysisNotFound
+	}
+
 	if err := f.answersSvc.SaveAnswers(ctx, answers); err != nil {
 		return models.Plan{}, []models.PlanItem{}, err
 	}
 
-	dumpID := answers.DumpID
-	dump, err := f.dumpSvc.GetUserDump(ctx, userID)
-	if err != nil {
-		return models.Plan{}, []models.PlanItem{}, err
-	}
-
-	analysis, err := f.analysisSvc.GetDumpAnalysis(ctx, dumpID)
-	if err != nil {
-		return models.Plan{}, []models.PlanItem{}, err
-	}
-
 	_ = analysis
-	_ = dump.RawText
+	_ = activeDump.RawText
 	// LLM generate plan here using dump.raw_text, analysis and answers
 
 	plan := models.Plan{
-		DumpID: dumpID,
+		DumpID: activeDump.ID,
 		Title:  "Plan",
 	}
 
