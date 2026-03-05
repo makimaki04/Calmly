@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -49,6 +50,12 @@ const (
 		SET 
 		status = $2
 		WHERE id = $1;
+	`
+	updateCompleteAnalysisStatusQuery = `
+		UPDATE dumps
+		SET 
+		status = $2
+		WHERE id = $1 AND status = 'waiting_analysis';
 	`
 	clearRawTextQuery = `
 		UPDATE dumps
@@ -105,16 +112,25 @@ func (r *DumpRepository) CreateDump(ctx context.Context, dump models.Dump) (uuid
 	return id, nil
 }
 
+var (
+	ErrStatusNotChanged = errors.New("failed to change dump status")
+)
+
 func (r *DumpRepository) UpdateStatus(ctx context.Context, dumpID uuid.UUID, status models.DumpStatus) error {
 	log := r.logger.With(
 		zap.String("operation", "update_status"),
 		zap.String("dump_id", dumpID.String()),
 	)
 
-	_, err := r.db.ExecContext(ctx, updateStatusQuery, dumpID, status)
+	res, err := r.db.ExecContext(ctx, updateStatusQuery, dumpID, status)
 	if err != nil {
 		log.Error("Update status failed", zap.Error(err))
 		return fmt.Errorf("update dump status: %w", checkErr(err))
+	}
+
+	if row, _ := res.RowsAffected(); row != 1 {
+		log.Error("update dump status", zap.Error(ErrStatusNotChanged))
+		return ErrStatusNotChanged
 	}
 
 	return nil
@@ -180,4 +196,79 @@ func (r *DumpRepository) GetActiveDump(ctx context.Context, userID uuid.UUID) (*
 	}
 
 	return &dump, nil
+}
+
+func (r *DumpRepository) CompleteAnalysisStep(ctx context.Context, dumpAnalysis models.DumpAnalysis) (err error) {
+	log := r.logger.With(
+		zap.String("operation", "complete_analysis_step"),
+		zap.String("dump_id", dumpAnalysis.DumpID.String()),
+	)
+
+	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{})
+	if err != nil {
+		log.Error("Begin tx failed", zap.Error(err))
+		return fmt.Errorf("begin tx: %w", checkErr(err))
+	}
+
+	defer func() {
+		if p := recover(); p != nil {
+			_ = tx.Rollback()
+			panic(p)
+		}
+
+		if err != nil {
+			_ = tx.Rollback()
+			return
+		}
+
+		if commitErr := tx.Commit(); commitErr != nil {
+			_ = tx.Rollback()
+			log.Error("Commit tx failed", zap.Error(commitErr))
+			err = fmt.Errorf("commit tx: %w", commitErr)
+		}
+	}()
+
+	tJson, err := json.Marshal(dumpAnalysis.Tasks)
+	if err != nil {
+		log.Error("Marshal tasks failed", zap.Error(err))
+		return fmt.Errorf("marshal tasks: %w", err)
+	}
+
+	qJson, err := json.Marshal(dumpAnalysis.Questions)
+	if err != nil {
+		log.Error("Marshal questions failed", zap.Error(err))
+		return fmt.Errorf("marshal questions: %w", err)
+	}
+
+	_, err = tx.ExecContext(
+		ctx,
+		insertDumpAnalysisQuery,
+		dumpAnalysis.DumpID,
+		tJson,
+		qJson,
+		dumpAnalysis.Mood,
+		dumpAnalysis.Quote,
+	)
+	if err != nil {
+		log.Error("Save analysis failed", zap.Error(err))
+		return fmt.Errorf("insert dump analysis: %w", checkErr(err))
+	}
+
+	res, err := tx.ExecContext(
+		ctx,
+		updateCompleteAnalysisStatusQuery,
+		dumpAnalysis.DumpID,
+		models.DumpStatusWaitingAnswers,
+	)
+	if err != nil {
+		log.Error("Update status failed", zap.Error(err))
+		return fmt.Errorf("update dump status: %w", checkErr(err))
+	}
+
+	if row, _ := res.RowsAffected(); row != 1 {
+		log.Error("update dump status", zap.Error(ErrStatusNotChanged))
+		return ErrStatusNotChanged
+	}
+
+	return nil
 }

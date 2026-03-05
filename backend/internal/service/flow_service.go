@@ -88,11 +88,7 @@ func (f *FlowService) StartSession(ctx context.Context, userID uuid.UUID, rawTex
 		return models.DumpAnalysis{}, err
 	}
 
-	if err := f.analysisSvc.SaveDumpAnalysis(ctx, mockAnalysis); err != nil {
-		return models.DumpAnalysis{}, err
-	}
-
-	if err := f.dumpSvc.SetDumpStatus(ctx, dumpID, models.DumpStatusWaitingAnswers); err != nil {
+	if err := f.dumpSvc.CompleteAnalysisStep(ctx, mockAnalysis); err != nil {
 		return models.DumpAnalysis{}, err
 	}
 
