@@ -89,18 +89,21 @@ func (f *FlowService) StartSession(ctx context.Context, userID uuid.UUID, rawTex
 	return mockAnalysis, nil
 }
 
-func (f *FlowService) SubmitAnswers(ctx context.Context, answers models.DumpAnswers) (models.Plan, []models.PlanItem, error) {
+func (f *FlowService) SubmitAnswers(ctx context.Context, userID uuid.UUID, answers models.DumpAnswers) (models.Plan, []models.PlanItem, error) {
 	if err := f.answersSvc.SaveAnswers(ctx, answers); err != nil {
 		return models.Plan{}, []models.PlanItem{}, err
 	}
 
 	dumpID := answers.DumpID
+	dump, err := f.dumpSvc.GetUserDump(ctx, userID)
+
 	analysis, err :=f.analysisSvc.GetDumpAnalysis(ctx, dumpID)
 	if err != nil {
 		return models.Plan{}, []models.PlanItem{}, err
 	}
 
 	_ = analysis
+	_ = dump
 	// LLM generate plan here using analysis and answers
 
 	plan := models.Plan{
