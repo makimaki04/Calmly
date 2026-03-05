@@ -74,11 +74,11 @@ func (f *FlowService) StartSession(ctx context.Context, userID uuid.UUID, rawTex
 		CreatedAt: time.Now(),
 	}
 
-	if err := f.analysisSvc.SaveDumpAnalysis(ctx, mockAnalysis); err != nil {
+	if err := f.dumpSvc.SetDumpStatus(ctx, dumpID, models.DumpStatusWaitingAnalysis); err != nil {
 		return models.DumpAnalysis{}, err
 	}
 
-	if err := f.dumpSvc.SetDumpStatus(ctx, dumpID, models.DumpStatusAnalyzed); err != nil {
+	if err := f.analysisSvc.SaveDumpAnalysis(ctx, mockAnalysis); err != nil {
 		return models.DumpAnalysis{}, err
 	}
 
@@ -96,15 +96,18 @@ func (f *FlowService) SubmitAnswers(ctx context.Context, userID uuid.UUID, answe
 
 	dumpID := answers.DumpID
 	dump, err := f.dumpSvc.GetUserDump(ctx, userID)
+	if err != nil {
+		return models.Plan{}, []models.PlanItem{}, err
+	}
 
-	analysis, err :=f.analysisSvc.GetDumpAnalysis(ctx, dumpID)
+	analysis, err := f.analysisSvc.GetDumpAnalysis(ctx, dumpID)
 	if err != nil {
 		return models.Plan{}, []models.PlanItem{}, err
 	}
 
 	_ = analysis
-	_ = dump
-	// LLM generate plan here using analysis and answers
+	_ = dump.RawText
+	// LLM generate plan here using dump.raw_text, analysis and answers
 
 	plan := models.Plan{
 		DumpID: dumpID,
