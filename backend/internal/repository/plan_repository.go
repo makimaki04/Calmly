@@ -42,9 +42,10 @@ const (
 		WHERE id = $1 AND dump_id = $2 AND deleted_at IS NULL;
 	`
 	selectPlansByDumpIDQuery = `
-		SELECT id, dump_id, title, created_at, saved_at
+		SELECT id, dump_id, title, created_at
 		FROM plans
-		WHERE dump_id = $1 AND deleted_at IS NULL;
+		WHERE dump_id = $1 AND deleted_at IS NULL
+		ORDER BY created_at ASC;
 	`
 	updateSavedPlanQuery = `
 		UPDATE plans
@@ -119,8 +120,6 @@ func (r *PlanRepository) GetCurrentSessionsPlans(ctx context.Context, dumpID uui
 			&plan.DumpID,
 			&plan.Title,
 			&plan.CreatedAt,
-			&plan.SavedAt,
-			&plan.DeletedAt,
 		); err != nil {
 			log.Error("Scan plan row failed", zap.Error(err))
 			return nil, fmt.Errorf("scan plan row: %w", checkErr(err))

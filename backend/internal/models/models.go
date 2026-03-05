@@ -58,14 +58,19 @@ type Question struct {
 }
 
 type DumpAnswers struct {
-	DumpID    uuid.UUID
-	Answers   []Answer `json:"answers"`
+	DumpID    uuid.UUID `json:"dump_id"`
+	Answers   []Answer  `json:"answers"`
 	CreatedAt time.Time
 }
 
 type Answer struct {
 	QuestionIdx int    `json:"question_idx"`
 	Text        string `json:"text"`
+}
+
+type UserFeedback struct {
+	DumpID uuid.UUID `json:"dump_id"`
+	Text   string    `json:"text"`
 }
 
 type Plan struct {
