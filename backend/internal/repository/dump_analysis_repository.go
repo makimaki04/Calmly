@@ -55,6 +55,8 @@ func (r *DumpAnalysisRepository) SaveAnalysis(ctx context.Context, dumpAnalysis 
 		zap.String("dump_id", dumpAnalysis.DumpID.String()),
 	)
 
+	log.Info("Save analysis started")
+
 	tJson, err := json.Marshal(dumpAnalysis.Tasks)
 	if err != nil {
 		log.Error("Marshal tasks failed", zap.Error(err))
@@ -91,6 +93,8 @@ func (r *DumpAnalysisRepository) GetAnalysis(ctx context.Context, dumpID uuid.UU
 		zap.String("operation", "get_analysis"),
 		zap.String("dump_id", dumpID.String()),
 	)
+
+	log.Info("Get analysis started")
 
 	var analysis models.DumpAnalysis
 	var tasks []byte

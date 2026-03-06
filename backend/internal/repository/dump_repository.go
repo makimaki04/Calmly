@@ -91,6 +91,8 @@ const (
 func (r *DumpRepository) CreateDump(ctx context.Context, dump models.Dump) (uuid.UUID, error) {
 	log := r.logger.With(zap.String("operation", "create_dump"))
 
+	log.Info("Create dump started")
+
 	var id uuid.UUID
 
 	err := r.db.QueryRowContext(
@@ -114,6 +116,7 @@ func (r *DumpRepository) CreateDump(ctx context.Context, dump models.Dump) (uuid
 
 var (
 	ErrStatusNotChanged = errors.New("failed to change dump status")
+	ErrRawTextNotCleared = errors.New("failed to clear raw text")
 )
 
 func (r *DumpRepository) UpdateStatus(ctx context.Context, dumpID uuid.UUID, status models.DumpStatus) error {
@@ -121,6 +124,8 @@ func (r *DumpRepository) UpdateStatus(ctx context.Context, dumpID uuid.UUID, sta
 		zap.String("operation", "update_status"),
 		zap.String("dump_id", dumpID.String()),
 	)
+
+	log.Info("Update status started")
 
 	res, err := r.db.ExecContext(ctx, updateStatusQuery, dumpID, status)
 	if err != nil {
@@ -142,10 +147,17 @@ func (r *DumpRepository) ClearRawText(ctx context.Context, dumpID uuid.UUID) err
 		zap.String("dump_id", dumpID.String()),
 	)
 
-	_, err := r.db.ExecContext(ctx, clearRawTextQuery, dumpID)
+	log.Info("Clear raw text started")
+
+	res, err := r.db.ExecContext(ctx, clearRawTextQuery, dumpID)
 	if err != nil {
 		log.Error("Clear raw text failed", zap.Error(err))
 		return fmt.Errorf("clear raw text: %w", checkErr(err))
+	}
+
+	if row, _ := res.RowsAffected(); row != 1 {
+		log.Error("Clear raw text failed", zap.Error(ErrRawTextNotCleared))
+		return ErrRawTextNotCleared
 	}
 
 	log.Info("Raw text cleared")
@@ -155,6 +167,8 @@ func (r *DumpRepository) ClearRawText(ctx context.Context, dumpID uuid.UUID) err
 
 func (r *DumpRepository) ClearExpiredRawTexts(ctx context.Context) error {
 	log := r.logger.With(zap.String("operation", "clear_expired_raw_texts"))
+
+	log.Info("Clear expired raw texts started")
 
 	_, err := r.db.ExecContext(ctx, clearExpiredRawTextsQuery)
 	if err != nil {
@@ -173,6 +187,8 @@ func (r *DumpRepository) GetActiveDump(ctx context.Context, userID uuid.UUID) (*
 		zap.String("operation", "get_active_dump"),
 		zap.String("user_id", userID.String()),
 	)
+
+	log.Info("Get active dump started")
 
 	var dump models.Dump
 
@@ -203,6 +219,8 @@ func (r *DumpRepository) CompleteAnalysisStep(ctx context.Context, dumpAnalysis 
 		zap.String("operation", "complete_analysis_step"),
 		zap.String("dump_id", dumpAnalysis.DumpID.String()),
 	)
+
+	log.Info("Complete analysis step started")
 
 	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{})
 	if err != nil {

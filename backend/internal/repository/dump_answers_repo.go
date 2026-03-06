@@ -49,6 +49,8 @@ func (r *DumpAnswersRepository) SaveAnswers(ctx context.Context, answers models.
 		zap.String("dump_id", answers.DumpID.String()),
 	)
 
+	log.Info("Save answers started")
+
 	answersJson, err := json.Marshal(answers.Answers)
 	if err != nil {
 		log.Error("Marshal answers failed", zap.Error(err))
@@ -71,6 +73,8 @@ func (r *DumpAnswersRepository) GetAnswers(ctx context.Context, dumpID uuid.UUID
 		zap.String("operation", "get_answers"),
 		zap.String("dump_id", dumpID.String()),
 	)
+
+	log.Info("Get answers started")
 
 	var dumpAnswers models.DumpAnswers
 	var answersJson []byte
