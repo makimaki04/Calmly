@@ -63,7 +63,7 @@ func (s *DumpService) GetUserDump(ctx context.Context, userID uuid.UUID) (*model
 
 	dump, err := s.repo.GetActiveDump(ctx, userID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get user dump: %w", err)
 	}
 
 	return dump, nil
@@ -74,7 +74,7 @@ func (s *DumpService) SetDumpStatus(ctx context.Context, dumpID uuid.UUID, statu
 	defer cancel()
 
 	if err := s.repo.UpdateStatus(ctx, dumpID, status); err != nil {
-		return err
+		return fmt.Errorf("set dump status: %w", err)
 	}
 
 	return nil
@@ -94,7 +94,7 @@ func (s *DumpService) CompleteAnalysisStep(ctx context.Context, dumpAnalysis mod
 
 	err := s.repo.CompleteAnalysisStep(ctx, dumpAnalysis)
 	if err != nil {
-		return err
+		return fmt.Errorf("complete analysis step: %w", err)
 	}
 
 	return nil

@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -40,7 +41,7 @@ func NewFlowService(
 func (f *FlowService) StartSession(ctx context.Context, userID uuid.UUID, rawText string) (models.DumpAnalysis, error) {
 	dumpID, err := f.dumpSvc.CreateDump(ctx, userID, rawText)
 	if err != nil {
-		return models.DumpAnalysis{}, err
+		return models.DumpAnalysis{}, fmt.Errorf("create dump: %w", err)
 	}
 
 	// LLM generate analysis here
@@ -85,11 +86,11 @@ func (f *FlowService) StartSession(ctx context.Context, userID uuid.UUID, rawTex
 	}
 
 	if err := f.dumpSvc.SetDumpStatus(ctx, dumpID, models.DumpStatusWaitingAnalysis); err != nil {
-		return models.DumpAnalysis{}, err
+		return models.DumpAnalysis{}, fmt.Errorf("set waiting analysis status: %w", err)
 	}
 
 	if err := f.dumpSvc.CompleteAnalysisStep(ctx, mockAnalysis); err != nil {
-		return models.DumpAnalysis{}, err
+		return models.DumpAnalysis{}, fmt.Errorf("complete analysis step: %w", err)
 	}
 
 	return mockAnalysis, nil
@@ -104,7 +105,7 @@ var (
 func (f *FlowService) SubmitAnswers(ctx context.Context, userID uuid.UUID, answers models.DumpAnswers) (models.Plan, []models.PlanItem, error) {
 	activeDump, err := f.dumpSvc.GetUserDump(ctx, userID)
 	if err != nil {
-		return models.Plan{}, []models.PlanItem{}, err
+		return models.Plan{}, []models.PlanItem{}, fmt.Errorf("get user dump: %w", err)
 	}
 
 	if activeDump == nil {
@@ -117,7 +118,7 @@ func (f *FlowService) SubmitAnswers(ctx context.Context, userID uuid.UUID, answe
 
 	analysis, err := f.analysisSvc.GetDumpAnalysis(ctx, activeDump.ID)
 	if err != nil {
-		return models.Plan{}, []models.PlanItem{}, err
+		return models.Plan{}, []models.PlanItem{}, fmt.Errorf("get dump analysis: %w", err)
 	}
 
 	if analysis == nil {
@@ -125,7 +126,7 @@ func (f *FlowService) SubmitAnswers(ctx context.Context, userID uuid.UUID, answe
 	}
 
 	if err := f.answersSvc.SaveAnswers(ctx, answers); err != nil {
-		return models.Plan{}, []models.PlanItem{}, err
+		return models.Plan{}, []models.PlanItem{}, fmt.Errorf("save answers: %w", err)
 	}
 
 	_ = analysis
@@ -139,7 +140,7 @@ func (f *FlowService) SubmitAnswers(ctx context.Context, userID uuid.UUID, answe
 
 	planID, err := f.planSvc.CreatePlan(ctx, plan.DumpID, plan.Title)
 	if err != nil {
-		return models.Plan{}, []models.PlanItem{}, err
+		return models.Plan{}, []models.PlanItem{}, fmt.Errorf("create plan: %w", err)
 	}
 	plan.ID = planID
 
@@ -165,7 +166,7 @@ func (f *FlowService) SubmitAnswers(ctx context.Context, userID uuid.UUID, answe
 	}
 	items, err := f.planItemSvc.CreateItems(ctx, mockPlanItems)
 	if err != nil {
-		return models.Plan{}, []models.PlanItem{}, err
+		return models.Plan{}, []models.PlanItem{}, fmt.Errorf("create plan items: %w", err)
 	}
 
 	return plan, items, nil
@@ -174,7 +175,7 @@ func (f *FlowService) SubmitAnswers(ctx context.Context, userID uuid.UUID, answe
 func (f *FlowService) GenerateNextPlanCandidate(ctx context.Context, fb models.UserFeedback) (models.Plan, []models.PlanItem, error) {
 	currPlans, err := f.planSvc.GetDumpPlans(ctx, fb.DumpID)
 	if err != nil {
-		return models.Plan{}, []models.PlanItem{}, err
+		return models.Plan{}, []models.PlanItem{}, fmt.Errorf("get current session plans: %w", err)
 	}
 
 	planIDs := make([]uuid.UUID, 0, len(currPlans))
@@ -184,7 +185,7 @@ func (f *FlowService) GenerateNextPlanCandidate(ctx context.Context, fb models.U
 
 	planItems, err := f.planItemSvc.GetItemsByPlanIDs(ctx, planIDs)
 	if err != nil {
-		return models.Plan{}, []models.PlanItem{}, err
+		return models.Plan{}, []models.PlanItem{}, fmt.Errorf("get plan items by plan ids: %w", err)
 	}
 
 	_ = planItems
@@ -197,7 +198,7 @@ func (f *FlowService) GenerateNextPlanCandidate(ctx context.Context, fb models.U
 
 	newPlanID, err := f.planSvc.CreatePlan(ctx, newPlan.DumpID, newPlan.Title)
 	if err != nil {
-		return models.Plan{}, []models.PlanItem{}, err
+		return models.Plan{}, []models.PlanItem{}, fmt.Errorf("create next plan candidate: %w", err)
 	}
 	newPlan.ID = newPlanID
 
@@ -224,7 +225,7 @@ func (f *FlowService) GenerateNextPlanCandidate(ctx context.Context, fb models.U
 
 	items, err := f.planItemSvc.CreateItems(ctx, mockPlanItems)
 	if err != nil {
-		return models.Plan{}, []models.PlanItem{}, err
+		return models.Plan{}, []models.PlanItem{}, fmt.Errorf("create next plan candidate items: %w", err)
 	}
 
 	return newPlan, items, nil
@@ -232,11 +233,11 @@ func (f *FlowService) GenerateNextPlanCandidate(ctx context.Context, fb models.U
 
 func (f *FlowService) FinalizePlanSelection(ctx context.Context, dumpID uuid.UUID, planID uuid.UUID) error {
 	if err := f.planSvc.SavePlan(ctx, dumpID, planID); err != nil {
-		return err
+		return fmt.Errorf("save selected plan: %w", err)
 	}
 
 	if err := f.dumpSvc.SetDumpStatus(ctx, dumpID, models.DumpStatusPlanned); err != nil {
-		return err
+		return fmt.Errorf("set planned status: %w", err)
 	}
 
 	return nil

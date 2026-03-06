@@ -223,6 +223,7 @@ func (r *PlanRepository) markPlanSaved(ctx context.Context, tx *sql.Tx, planID u
 	}
 
 	if rows, _ := res.RowsAffected(); rows != 1 {
+		log.Error("Save plan failed", zap.Error(ErrPlanNotUpdated))
 		return ErrPlanNotUpdated
 	}
 
@@ -295,10 +296,15 @@ func (r *PlanRepository) DeleteSavedPlan(ctx context.Context, planID uuid.UUID) 
 
 	log.Info("Delete saved plan started")
 
-	_, err := r.db.ExecContext(ctx, deleteSavedPlanQuery, planID)
+	res, err := r.db.ExecContext(ctx, deleteSavedPlanQuery, planID)
 	if err != nil {
 		log.Error("Delete saved plan failed", zap.Error(err))
 		return fmt.Errorf("soft delete plan: %w", checkErr(err))
+	}
+
+	if rows, _ := res.RowsAffected(); rows != 1 {
+		log.Error("Delete saved plan failed", zap.Error(ErrPlanNotUpdated))
+		return ErrPlanNotUpdated
 	}
 
 	return nil

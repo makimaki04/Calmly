@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -13,7 +14,7 @@ import (
 // AnswerService delegates to repository which owns error logging.
 // This layer only wraps and propagates errors — no duplicate logs.
 type AnswerService struct {
-	repo     repository.DumpAnswers
+	repo   repository.DumpAnswers
 	logger *zap.Logger
 }
 
@@ -29,7 +30,7 @@ func (s *AnswerService) SaveAnswers(ctx context.Context, answers models.DumpAnsw
 	defer cancel()
 
 	if err := s.repo.SaveAnswers(ctx, answers); err != nil {
-		return err
+		return fmt.Errorf("save answers: %w", err)
 	}
 
 	return nil
@@ -39,9 +40,9 @@ func (s *AnswerService) GetAnswers(ctx context.Context, dumpID uuid.UUID) (*mode
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	answers, err := s.repo.GetAnswers(ctx, dumpID) 
+	answers, err := s.repo.GetAnswers(ctx, dumpID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get answers: %w", err)
 	}
 
 	if answers == nil {
