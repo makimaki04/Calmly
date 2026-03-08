@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/makimaki04/Calmly/internal/models"
 	"github.com/makimaki04/Calmly/internal/repository"
@@ -118,13 +119,19 @@ func (h *Handler) SubmitAnswers(w http.ResponseWriter, r *http.Request) {
 
 	log.Info("Submit answers started")
 
+	dumpID, err := uuid.Parse(chi.URLParam(r, "dump_id"))
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "wrong url params", h.logger)
+		return
+	}
+
 	req, err := parseJSONBody[contract.SubmitAnswersRequest](w, r, MaxBodyJSON, log)
 	if err != nil {
 		respondWithError(w, http.StatusBadRequest, "invalid request body", log)
 		return
 	}
 
-	log = log.With(zap.String("dump_id", req.DumpID.String()))
+	log = log.With(zap.String("dump_id", dumpID.String()))
 
 	var answers []models.Answer
 	for _, a := range req.Answers {
@@ -137,7 +144,7 @@ func (h *Handler) SubmitAnswers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	dumpAnswers := models.DumpAnswers{
-		DumpID:  req.DumpID,
+		DumpID:  dumpID,
 		Answers: answers,
 	}
 
@@ -167,21 +174,27 @@ func (h *Handler) RegeneratePlan(w http.ResponseWriter, r *http.Request) {
 
 	log.Info("Regenerate plan started")
 
+	dumpID, err := uuid.Parse(chi.URLParam(r, "dump_id"))
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "wrong url params", h.logger)
+		return
+	}
+
 	req, err := parseJSONBody[contract.RegeneratePlanRequest](w, r, MaxBodyJSON, log)
 	if err != nil {
 		respondWithError(w, http.StatusBadRequest, "invalid request body", log)
 		return
 	}
 
-	log = log.With(zap.String("dump_id", req.DumpID.String()))
+	log = log.With(zap.String("dump_id", dumpID.String()))
 
 	fb := models.UserFeedback{
-		DumpID: req.DumpID,
+		DumpID: dumpID,
 		Text:   req.Feedback,
 	}
 
 	ctx := r.Context()
-	plan, items, err := h.flow.GenerateNextPlanCandidate(ctx, fb)
+	plan, items, err := h.flow.GenerateNextPlanCandidate(ctx, mockUserID, fb)
 	if err != nil {
 		log.Error("Regenerate plan failed", zap.Error(err))
 		respondWithError(w, mapFlowErrorToStatus(err), errorMessage(err), log)
@@ -206,13 +219,18 @@ func (h *Handler) FinalizePlanSelection(w http.ResponseWriter, r *http.Request) 
 
 	log.Info("Finalize plan started")
 
+	dumpID, err := uuid.Parse(chi.URLParam(r, "dump_id"))
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "wrong url params", h.logger)
+		return
+	}
+
 	req, err := parseJSONBody[contract.FinalizePlanRequest](w, r, MaxBodyJSON, log)
 	if err != nil {
 		respondWithError(w, http.StatusBadRequest, "invalid request body", log)
 		return
 	}
 
-	dumpID := req.DumpID
 	planID := req.PlanID
 	log = log.With(
 		zap.String("dump_id", dumpID.String()),
@@ -258,7 +276,11 @@ func mapFlowErrorToStatus(err error) int {
 		return http.StatusNotFound
 	case errors.Is(err, service.ErrDumpNotBelongUser):
 		return http.StatusForbidden
+	case errors.Is(err, service.ErrAnswersAlreadySubmitted):
+		return http.StatusConflict
 	case errors.Is(err, service.ErrAnalysisNotFound):
+		return http.StatusConflict
+	case errors.Is(err, service.ErrNoActiveSessionForRegeneration):
 		return http.StatusConflict
 	case errors.Is(err, repository.ErrNotFound):
 		return http.StatusNotFound
@@ -275,6 +297,10 @@ func errorMessage(err error) string {
 		return "dump does not belong to current user"
 	case errors.Is(err, service.ErrAnalysisNotFound):
 		return "analysis is missing"
+	case errors.Is(err, service.ErrAnswersAlreadySubmitted):
+		return "answers already submitted"
+	case errors.Is(err, service.ErrNoActiveSessionForRegeneration):
+		return "no active session available for plan regeneration"
 	case errors.Is(err, repository.ErrNotFound):
 		return "resource not found"
 	default:

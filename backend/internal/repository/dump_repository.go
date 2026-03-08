@@ -115,7 +115,7 @@ func (r *DumpRepository) CreateDump(ctx context.Context, dump models.Dump) (uuid
 }
 
 var (
-	ErrStatusNotChanged = errors.New("failed to change dump status")
+	ErrStatusNotChanged  = errors.New("failed to change dump status")
 	ErrRawTextNotCleared = errors.New("failed to clear raw text")
 )
 

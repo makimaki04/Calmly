@@ -60,7 +60,7 @@ CREATE TABLE dumps (
     status dump_status NOT NULL DEFAULT 'new',
 
     raw_text text,
-    raw_deleted_at timestamptz,
+    raw_text_deleted_at timestamptz,
     raw_text_expires_at timestamptz,
     
     created_at timestamptz NOT NULL DEFAULT now(),
