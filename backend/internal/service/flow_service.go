@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/makimaki04/Calmly/internal/models"
+	"github.com/makimaki04/Calmly/internal/repository"
 	"go.uber.org/zap"
 )
 
@@ -97,9 +98,10 @@ func (f *FlowService) StartSession(ctx context.Context, userID uuid.UUID, rawTex
 }
 
 var (
-	ErrActiveDumpNotFound = errors.New("active session not found")
-	ErrDumpNotBelongUser  = errors.New("dump does not belong to current user session")
-	ErrAnalysisNotFound   = errors.New("invalid session state: analysis is missing")
+	ErrActiveDumpNotFound      = errors.New("active session not found")
+	ErrDumpNotBelongUser       = errors.New("dump does not belong to current user session")
+	ErrAnalysisNotFound        = errors.New("invalid session state: analysis is missing")
+	ErrAnswersAlreadySubmitted = errors.New("answers already submitted")
 )
 
 func (f *FlowService) SubmitAnswers(ctx context.Context, userID uuid.UUID, answers models.DumpAnswers) (models.Plan, []models.PlanItem, error) {
@@ -126,6 +128,9 @@ func (f *FlowService) SubmitAnswers(ctx context.Context, userID uuid.UUID, answe
 	}
 
 	if err := f.answersSvc.SaveAnswers(ctx, answers); err != nil {
+		if errors.Is(err, repository.ErrUniqueViolation) {
+			return models.Plan{}, []models.PlanItem{}, ErrAnswersAlreadySubmitted
+		}
 		return models.Plan{}, []models.PlanItem{}, fmt.Errorf("save answers: %w", err)
 	}
 
@@ -172,7 +177,18 @@ func (f *FlowService) SubmitAnswers(ctx context.Context, userID uuid.UUID, answe
 	return plan, items, nil
 }
 
-func (f *FlowService) GenerateNextPlanCandidate(ctx context.Context, fb models.UserFeedback) (models.Plan, []models.PlanItem, error) {
+var ErrNoActiveSessionForRegeneration = errors.New("no active session for regeneration")
+
+func (f *FlowService) GenerateNextPlanCandidate(ctx context.Context, userID uuid.UUID, fb models.UserFeedback) (models.Plan, []models.PlanItem, error) {
+	dump, err := f.dumpSvc.GetUserDump(ctx, userID)
+	if err != nil {
+		return models.Plan{}, []models.PlanItem{}, fmt.Errorf("get user dump: %w", err)
+	}
+
+	if dump == nil {
+		return models.Plan{}, []models.PlanItem{}, ErrNoActiveSessionForRegeneration
+	}
+
 	currPlans, err := f.planSvc.GetDumpPlans(ctx, fb.DumpID)
 	if err != nil {
 		return models.Plan{}, []models.PlanItem{}, fmt.Errorf("get current session plans: %w", err)
