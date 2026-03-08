@@ -20,7 +20,7 @@ type AnswerService struct {
 
 func NewAnswerService(repo repository.DumpAnswers, logger *zap.Logger) *AnswerService {
 	return &AnswerService{
-		repo:     repo,
+		repo:   repo,
 		logger: logger.With(zap.String("component", "service")),
 	}
 }
