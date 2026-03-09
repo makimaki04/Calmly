@@ -11,12 +11,13 @@ import (
 )
 
 type Config struct {
-	Address      string `env:"RUN_ADDRESS"`
-	DatabaseURI  string `env:"DATABASE_URI"`
-	JWTSecret    string `env:"JWT_SECRET"`
-	LoggerConfig string `env:"LOGGER_CONFIG"`
-	DBConf       DBLimits
-	DumpExpTime  time.Duration `env:"DUMP_EXPTIME"`
+	Address         string `env:"RUN_ADDRESS"`
+	DatabaseURI     string `env:"DATABASE_URI"`
+	JWTSecret       string `env:"JWT_SECRET"`
+	LoggerConfig    string `env:"LOGGER_CONFIG"`
+	DBConf          DBLimits
+	DumpExpTime     time.Duration `env:"DUMP_EXPTIME"`
+	AnthropicApiKey string        `env:"ANTHROPIC_API_KEY"`
 }
 
 type DBLimits struct {
@@ -68,6 +69,10 @@ func LoadAppConfig() (Config, error) {
 
 	if cfg.JWTSecret == "" {
 		return Config{}, fmt.Errorf("jwt secret is required")
+	}
+
+	if cfg.AnthropicApiKey == "" {
+		return Config{}, fmt.Errorf("anthropic ppi key is required")
 	}
 
 	if len(cfg.JWTSecret) < 32 {
