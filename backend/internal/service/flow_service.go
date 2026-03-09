@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/makimaki04/Calmly/internal/llm"
 	"github.com/makimaki04/Calmly/internal/models"
 	"github.com/makimaki04/Calmly/internal/repository"
 	"go.uber.org/zap"
@@ -18,6 +19,8 @@ type FlowService struct {
 	answersSvc  Answers
 	planSvc     Plan
 	planItemSvc PlanItem
+	analysisGen llm.AnalysisGenerator
+	plangen     llm.PlanGenerator
 	logger      *zap.Logger
 }
 
@@ -27,6 +30,8 @@ func NewFlowService(
 	answersSvc Answers,
 	planSvc Plan,
 	planItemSvc PlanItem,
+	analysisGen llm.AnalysisGenerator,
+	plangen llm.PlanGenerator,
 	logger *zap.Logger,
 ) *FlowService {
 	return &FlowService{
@@ -35,6 +40,8 @@ func NewFlowService(
 		answersSvc:  answersSvc,
 		planSvc:     planSvc,
 		planItemSvc: planItemSvc,
+		analysisGen: analysisGen,
+		plangen:     plangen,
 		logger:      logger.With(zap.String("component", "service")),
 	}
 }

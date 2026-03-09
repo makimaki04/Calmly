@@ -15,6 +15,7 @@ import (
 	"github.com/makimaki04/Calmly/internal/config"
 	"github.com/makimaki04/Calmly/internal/database"
 	"github.com/makimaki04/Calmly/internal/handler"
+	"github.com/makimaki04/Calmly/internal/llm"
 	"github.com/makimaki04/Calmly/internal/logger"
 	"github.com/makimaki04/Calmly/internal/middleware"
 	"github.com/makimaki04/Calmly/internal/repository"
@@ -45,7 +46,8 @@ func main() {
 
 	repo := repository.NewRepository(db, appLogger)
 	svc := service.NewService(repo, cfg.DumpExpTime, appLogger)
-	flow := service.NewFlowService(svc.Dump, svc.Analysis, svc.Answers, svc.Plan, svc.PlanItem, appLogger)
+	anthropicClient := llm.NewAnthropicClient(cfg.AnthropicApiKey, appLogger)
+	flow := service.NewFlowService(svc.Dump, svc.Analysis, svc.Answers, svc.Plan, svc.PlanItem, anthropicClient, anthropicClient, appLogger)
 	httpHandler := handler.NewHandler(svc, flow, appLogger)
 
 	r := chi.NewRouter()
