@@ -30,6 +30,7 @@ type Answers interface {
 
 type Plan interface {
 	CreatePlan(ctx context.Context, dumpID uuid.UUID, title string) (uuid.UUID, error)
+	SubmitAnswersAndCreatePlan(ctx context.Context, answers models.DumpAnswers, plan models.Plan, planItems []models.PlanItem) (models.Plan, []models.PlanItem, error)
 	SavePlan(ctx context.Context, dumpID uuid.UUID, planID uuid.UUID) error
 	GetDumpPlans(ctx context.Context, dumpID uuid.UUID) ([]models.Plan, error)
 	GetUserSavedPlans(ctx context.Context, userID uuid.UUID) ([]models.Plan, error)

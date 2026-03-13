@@ -88,14 +88,61 @@ const (
 	`
 )
 
-func (r *DumpRepository) CreateDump(ctx context.Context, dump models.Dump) (uuid.UUID, error) {
+func (r *DumpRepository) CreateDump(ctx context.Context, userID uuid.UUID, dump models.Dump) (uuid.UUID, error) {
 	log := r.logger.With(zap.String("operation", "create_dump"))
 
 	log.Info("Create dump started")
 
+	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{})
+	if err != nil {
+		log.Error("Begin tx failed", zap.Error(err))
+		return uuid.Nil, fmt.Errorf("begin tx: %w", checkErr(err))
+	}
+
+	defer func() {
+		if p := recover(); p != nil {
+			_ = tx.Rollback()
+			panic(p)
+		}
+
+		if err != nil {
+			_ = tx.Rollback()
+			return
+		}
+
+		if commitErr := tx.Commit(); commitErr != nil {
+			_ = tx.Rollback()
+			log.Error("Commit tx failed", zap.Error(commitErr))
+			err = fmt.Errorf("commit tx: %w", commitErr)
+		}
+	}()
+
+	var activeDump models.Dump
+	err = tx.QueryRowContext(ctx, selectDumpByUserIDQuery, userID).Scan(
+		&activeDump.ID,
+	)
+
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		log.Error("Get active dump failed", zap.Error(err))
+		return uuid.Nil, fmt.Errorf("select active dump: %w", checkErr(err))
+	}
+
+	if activeDump.ID != uuid.Nil {
+		res, err := tx.ExecContext(ctx, updateStatusQuery, activeDump.ID, string(models.DumpStatusAbandoned))
+		if err != nil {
+			log.Error("Update status failed", zap.Error(err))
+			return uuid.Nil, fmt.Errorf("update dump status: %w", checkErr(err))
+		}
+
+		if row, _ := res.RowsAffected(); row != 1 {
+			log.Error("update dump status", zap.Error(ErrStatusNotChanged))
+			return uuid.Nil, ErrStatusNotChanged
+		}
+	}
+
 	var id uuid.UUID
 
-	err := r.db.QueryRowContext(
+	if err := tx.QueryRowContext(
 		ctx,
 		insertDumpQuery,
 		dump.UserID,
@@ -103,8 +150,7 @@ func (r *DumpRepository) CreateDump(ctx context.Context, dump models.Dump) (uuid
 		dump.Status,
 		dump.RawText,
 		dump.RawExpiresAt,
-	).Scan(&id)
-	if err != nil {
+	).Scan(&id); err != nil {
 		log.Error("Create dump failed", zap.Error(err))
 		return uuid.UUID{}, fmt.Errorf("insert dump: %w", checkErr(err))
 	}

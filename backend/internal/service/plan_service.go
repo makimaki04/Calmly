@@ -40,6 +40,18 @@ func (s *PlanService) CreatePlan(ctx context.Context, dumpID uuid.UUID, title st
 	return planID, nil
 }
 
+func (s *PlanService) SubmitAnswersAndCreatePlan(ctx context.Context, answers models.DumpAnswers, plan models.Plan, planItems []models.PlanItem) (models.Plan, []models.PlanItem, error) {
+	ctx, cancel := context.WithTimeout(ctx, 12*time.Second)
+	defer cancel()
+
+	plan, items, err := s.repo.SubmitAnswersAndCreatePlan(ctx, answers, plan, planItems)
+	if err != nil {
+		return  models.Plan{}, []models.PlanItem{}, err
+	}
+
+	return plan, items, nil 
+}
+
 func (s *PlanService) SavePlan(ctx context.Context, dumpID uuid.UUID, planID uuid.UUID) error {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()

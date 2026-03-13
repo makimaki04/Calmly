@@ -13,7 +13,7 @@ import (
 )
 
 type Dump interface {
-	CreateDump(ctx context.Context, dump models.Dump) (uuid.UUID, error)
+	CreateDump(ctx context.Context, userID uuid.UUID, dump models.Dump) (uuid.UUID, error)
 	UpdateStatus(ctx context.Context, dumpID uuid.UUID, status models.DumpStatus) error
 	ClearRawText(ctx context.Context, dumpID uuid.UUID) error
 	GetActiveDump(ctx context.Context, userID uuid.UUID) (*models.Dump, error)
@@ -34,6 +34,7 @@ type DumpAnswers interface {
 type Plan interface {
 	CreatePlan(ctx context.Context, plan models.Plan) (uuid.UUID, error)
 	GetCurrentSessionsPlans(ctx context.Context, dumpID uuid.UUID) ([]models.Plan, error)
+	SubmitAnswersAndCreatePlan(ctx context.Context, answers models.DumpAnswers, plan models.Plan, planItems []models.PlanItem) (models.Plan, []models.PlanItem, error)
 	FinalizeSelectedPlan(ctx context.Context, dumpID uuid.UUID, planID uuid.UUID) error
 	GetSavedPlans(ctx context.Context, userID uuid.UUID) ([]models.Plan, error)
 	DeleteSavedPlan(ctx context.Context, planID uuid.UUID) error
