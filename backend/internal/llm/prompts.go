@@ -46,7 +46,6 @@ var (
 			<user_dump>
 			{{raw_text}}
 			</user_dump>
-
 		`
 
 	StructuredOutputInstruction = `

@@ -56,38 +56,9 @@ func (f *FlowService) StartSession(ctx context.Context, userID uuid.UUID, rawTex
 	mood := models.MoodTired
 	quote := ""
 	mockAnalysis := models.DumpAnalysis{
-		DumpID: dumpID,
-		Tasks: []models.Task{
-			{
-				Text:     "Task 1",
-				Priority: "low",
-				Category: "work",
-			},
-			{
-				Text:     "Task 2",
-				Priority: "high",
-				Category: "mind",
-			},
-			{
-				Text:     "Task 3",
-				Priority: "high",
-				Category: "life balance",
-			},
-		},
-		Questions: []models.Question{
-			{
-				ID:   uuid.New(),
-				Text: "What's going on",
-			},
-			{
-				ID:   uuid.New(),
-				Text: "Another qusetion",
-			},
-			{
-				ID:   uuid.New(),
-				Text: "Question number 3",
-			},
-		},
+		DumpID:    dumpID,
+		Tasks:     []models.Task{},
+		Questions: []models.Question{},
 		Mood:      &mood,
 		Quote:     &quote,
 		CreatedAt: time.Now(),
@@ -134,13 +105,6 @@ func (f *FlowService) SubmitAnswers(ctx context.Context, userID uuid.UUID, answe
 		return models.Plan{}, []models.PlanItem{}, ErrAnalysisNotFound
 	}
 
-	if err := f.answersSvc.SaveAnswers(ctx, answers); err != nil {
-		if errors.Is(err, repository.ErrUniqueViolation) {
-			return models.Plan{}, []models.PlanItem{}, ErrAnswersAlreadySubmitted
-		}
-		return models.Plan{}, []models.PlanItem{}, fmt.Errorf("save answers: %w", err)
-	}
-
 	_ = analysis
 	_ = activeDump.RawText
 	// LLM generate plan here using dump.raw_text, analysis and answers
@@ -150,34 +114,13 @@ func (f *FlowService) SubmitAnswers(ctx context.Context, userID uuid.UUID, answe
 		Title:  "Plan",
 	}
 
-	planID, err := f.planSvc.CreatePlan(ctx, plan.DumpID, plan.Title)
-	if err != nil {
-		return models.Plan{}, []models.PlanItem{}, fmt.Errorf("create plan: %w", err)
-	}
-	plan.ID = planID
+	mockPlanItems := []models.PlanItem{}
 
-	mockPlanItems := []models.PlanItem{
-		{
-			PlanID: planID,
-			Ord:    1,
-			Text:   "Make some food",
-			Done:   false,
-		},
-		{
-			PlanID: planID,
-			Ord:    2,
-			Text:   "Sleep",
-			Done:   false,
-		},
-		{
-			PlanID: planID,
-			Ord:    3,
-			Text:   "Gym",
-			Done:   false,
-		},
-	}
-	items, err := f.planItemSvc.CreateItems(ctx, mockPlanItems)
+	plan, items, err := f.planSvc.SubmitAnswersAndCreatePlan(ctx, answers, plan, mockPlanItems)
 	if err != nil {
+		if errors.Is(err, repository.ErrAnswersUniqueViolation) {
+			return models.Plan{}, []models.PlanItem{}, ErrAnswersAlreadySubmitted
+		}
 		return models.Plan{}, []models.PlanItem{}, fmt.Errorf("create plan items: %w", err)
 	}
 
@@ -196,7 +139,7 @@ func (f *FlowService) GenerateNextPlanCandidate(ctx context.Context, userID uuid
 		return models.Plan{}, []models.PlanItem{}, ErrNoActiveSessionForRegeneration
 	}
 
-	currPlans, err := f.planSvc.GetDumpPlans(ctx, fb.DumpID)
+	currPlans, err := f.planSvc.GetDumpPlans(ctx, dump.ID)
 	if err != nil {
 		return models.Plan{}, []models.PlanItem{}, fmt.Errorf("get current session plans: %w", err)
 	}
@@ -215,7 +158,7 @@ func (f *FlowService) GenerateNextPlanCandidate(ctx context.Context, userID uuid
 	// LLM generate new plan and plan_items here following user feedback and current plans and planItems
 
 	newPlan := models.Plan{
-		DumpID: fb.DumpID,
+		DumpID: dump.ID,
 		Title:  "Plan",
 	}
 
@@ -225,26 +168,7 @@ func (f *FlowService) GenerateNextPlanCandidate(ctx context.Context, userID uuid
 	}
 	newPlan.ID = newPlanID
 
-	mockPlanItems := []models.PlanItem{
-		{
-			PlanID: newPlan.ID,
-			Ord:    1,
-			Text:   "Wake up",
-			Done:   false,
-		},
-		{
-			PlanID: newPlan.ID,
-			Ord:    2,
-			Text:   "Football",
-			Done:   false,
-		},
-		{
-			PlanID: newPlan.ID,
-			Ord:    3,
-			Text:   "Home work",
-			Done:   false,
-		},
-	}
+	mockPlanItems := []models.PlanItem{}
 
 	items, err := f.planItemSvc.CreateItems(ctx, mockPlanItems)
 	if err != nil {
@@ -257,10 +181,6 @@ func (f *FlowService) GenerateNextPlanCandidate(ctx context.Context, userID uuid
 func (f *FlowService) FinalizePlanSelection(ctx context.Context, dumpID uuid.UUID, planID uuid.UUID) error {
 	if err := f.planSvc.SavePlan(ctx, dumpID, planID); err != nil {
 		return fmt.Errorf("save selected plan: %w", err)
-	}
-
-	if err := f.dumpSvc.SetDumpStatus(ctx, dumpID, models.DumpStatusPlanned); err != nil {
-		return fmt.Errorf("set planned status: %w", err)
 	}
 
 	return nil

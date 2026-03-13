@@ -31,19 +31,8 @@ func (s *DumpService) CreateDump(ctx context.Context, userID uuid.UUID, rawText 
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	activeDump, err := s.repo.GetActiveDump(ctx, userID)
-	if err != nil {
-		return uuid.UUID{}, fmt.Errorf("get active dump: %w", err)
-	}
-
-	if activeDump != nil {
-		if err := s.AbandonDump(ctx, activeDump.ID); err != nil {
-			return uuid.UUID{}, fmt.Errorf("abandon previous dump: %w", err)
-		}
-	}
-
 	expTime := time.Now().Add(s.dumpExpTime)
-	id, err := s.repo.CreateDump(ctx, models.Dump{
+	id, err := s.repo.CreateDump(ctx, userID, models.Dump{
 		UserID:       &userID,
 		GuestID:      nil,
 		Status:       models.DumpStatusNew,

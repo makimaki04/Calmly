@@ -3,8 +3,10 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/makimaki04/Calmly/internal/models"
@@ -62,7 +64,7 @@ const (
 			AND saved_at IS NULL;
 	`
 	selectSavedPlansQuery = `
-		SELECT p.id, p.dump_id, p.title, p.created_at
+		SELECT p.id, p.dump_id, p.title, p.created_at, p.saved_at
 		FROM plans as p
 		JOIN dumps as d ON p.dump_id = d.id
 		WHERE d.user_id = $1 AND p.saved_at IS NOT NULL AND p.deleted_at IS NULL
@@ -136,6 +138,85 @@ func (r *PlanRepository) GetCurrentSessionsPlans(ctx context.Context, dumpID uui
 	return plans, nil
 }
 
+var ErrAnswersUniqueViolation = errors.New("answers already exists")
+
+func (r *PlanRepository) SubmitAnswersAndCreatePlan(ctx context.Context, answers models.DumpAnswers, plan models.Plan, planItems []models.PlanItem) (models.Plan, []models.PlanItem, error) {
+	log := r.logger.With(
+		zap.String("operation", "finalize_selected_plan"),
+		zap.String("dump_id", answers.DumpID.String()),
+	)
+
+	log.Info("Submit answers and create plan step started")
+
+	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{})
+	if err != nil {
+		log.Error("Begin tx failed", zap.Error(err))
+		return models.Plan{}, []models.PlanItem{}, fmt.Errorf("begin tx: %w", checkErr(err))
+	}
+
+	defer func() {
+		if p := recover(); p != nil {
+			_ = tx.Rollback()
+			panic(p)
+		}
+
+		if err != nil {
+			_ = tx.Rollback()
+			return
+		}
+
+		if commitErr := tx.Commit(); commitErr != nil {
+			_ = tx.Rollback()
+			log.Error("Commit tx failed", zap.Error(commitErr))
+			err = fmt.Errorf("commit tx: %w", commitErr)
+		}
+	}()
+
+	answersJson, err := json.Marshal(answers.Answers)
+	if err != nil {
+		log.Error("Marshal answers failed", zap.Error(err))
+		return models.Plan{}, []models.PlanItem{}, fmt.Errorf("marshal answers: %w", err)
+	}
+
+	_, err = tx.ExecContext(ctx, insertAnswersQuery, answers.DumpID, answersJson)
+	if err != nil {
+		err = checkErr(err)
+		if errors.Is(err, ErrUniqueViolation) {
+			return models.Plan{}, []models.PlanItem{}, ErrAnswersUniqueViolation
+		}
+		log.Error("Save answers failed", zap.Error(err))
+		return models.Plan{}, []models.PlanItem{}, fmt.Errorf("insert dump answers: %w", err)
+	}
+
+	var id uuid.UUID
+
+	if err := tx.QueryRowContext(ctx, insertPlanQuery, plan.DumpID, plan.Title).
+		Scan(&id); err != nil {
+		log.Error("Create plan failed", zap.Error(err))
+		return models.Plan{}, []models.PlanItem{}, fmt.Errorf("insert plan: %w", checkErr(err))
+	}
+
+	plan.ID = id
+
+	pItems := make([]models.PlanItem, 0, len(planItems))
+	for _, item := range planItems {
+		var id uuid.UUID
+		var createdAt time.Time
+		err = tx.QueryRowContext(ctx, insertPlanItemQuery, item.PlanID, item.Ord, item.Text).Scan(&id, &createdAt)
+		if err != nil {
+			log.Error("Create plan item failed", zap.Error(err))
+			err = fmt.Errorf("insert plan item: %w", checkErr(err))
+			return models.Plan{}, []models.PlanItem{}, err
+		}
+
+		item.ID = id
+		item.CreatedAt = createdAt
+		pItems = append(pItems, item)
+	}
+
+	return plan, pItems, nil
+}
+
 func (r *PlanRepository) FinalizeSelectedPlan(ctx context.Context, dumpID uuid.UUID, planID uuid.UUID) (err error) {
 	log := r.logger.With(
 		zap.String("operation", "finalize_selected_plan"),
@@ -185,6 +266,17 @@ func (r *PlanRepository) FinalizeSelectedPlan(ctx context.Context, dumpID uuid.U
 	if err != nil {
 		log.Error("Delete unsaved plans failed", zap.Error(err))
 		return fmt.Errorf("delete unsaved plans: %w", err)
+	}
+
+	res, err := tx.ExecContext(ctx, updateStatusQuery, dumpID, string(models.DumpStatusPlanned))
+	if err != nil {
+		log.Error("Update status failed", zap.Error(err))
+		return fmt.Errorf("update dump status: %w", checkErr(err))
+	}
+
+	if row, _ := res.RowsAffected(); row != 1 {
+		log.Error("update dump status", zap.Error(ErrStatusNotChanged))
+		return ErrStatusNotChanged
 	}
 
 	return nil
@@ -272,6 +364,7 @@ func (r *PlanRepository) GetSavedPlans(ctx context.Context, userID uuid.UUID) ([
 			&plan.DumpID,
 			&plan.Title,
 			&plan.CreatedAt,
+			&plan.SavedAt,
 		); err != nil {
 			log.Error("Scan saved plan row failed", zap.Error(err))
 			return nil, fmt.Errorf("scan saved plan row: %w", checkErr(err))
