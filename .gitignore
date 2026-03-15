@@ -11,6 +11,7 @@
 *.lib
 *.pdb
 *.ilk
+.gocache
 
 # Test binaries
 *.test
