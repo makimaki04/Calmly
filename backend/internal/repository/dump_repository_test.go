@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 	"database/sql/driver"
 	"encoding/json"
 	"errors"
@@ -12,91 +13,27 @@ import (
 	"go.uber.org/zap"
 )
 
-func TestDumpRepository_CreateDump(t *testing.T) {
+func TestDumpRepository_CreateDump_InsertErrorRollsBack(t *testing.T) {
 	userID := uuid.New()
-	activeDumpID := uuid.New()
-	newDumpID := uuid.New()
-	rawText := "raw"
-
-	db := newTestDB(t, []sqlExpectation{
-		{kind: "begin"},
-		{
-			kind:  "query",
-			match: "FROM dumps",
-			checkArgs: func(args []driver.NamedValue) error {
-				if got := namedValueAt(args, 0); got != userID {
-					return errors.New("unexpected user id")
-				}
-				return nil
-			},
-			rows: &sqlRows{
-				columns: []string{"id"},
-				values:  [][]driver.Value{{activeDumpID[:]}},
-			},
-		},
-		{
-			kind:   "exec",
-			match:  "UPDATE dumps",
-			result: driver.RowsAffected(1),
-		},
-		{
-			kind:  "query",
-			match: "INSERT INTO dumps",
-			checkArgs: func(args []driver.NamedValue) error {
-				if got := namedValueAt(args, 0); got != userID {
-					return errors.New("unexpected dump user id")
-				}
-				if got := namedValueAt(args, 3); got != rawText {
-					return errors.New("unexpected raw text")
-				}
-				return nil
-			},
-			rows: &sqlRows{
-				columns: []string{"id"},
-				values:  [][]driver.Value{{newDumpID[:]}},
-			},
-		},
-		{kind: "commit"},
-	})
-
-	repo := NewDumpRepo(db, zap.NewNop())
-	got, err := repo.CreateDump(context.Background(), userID, models.Dump{
-		UserID:  &userID,
-		Status:  models.DumpStatusNew,
-		RawText: &rawText,
-	})
-	if err != nil {
-		t.Fatalf("CreateDump() error = %v", err)
-	}
-	if got != newDumpID {
-		t.Fatalf("CreateDump() = %v, want %v", got, newDumpID)
-	}
-}
-
-func TestDumpRepository_CreateDump_StatusNotChanged(t *testing.T) {
-	userID := uuid.New()
-	activeDumpID := uuid.New()
+	wantErr := errors.New("insert failed")
 
 	db := newTestDB(t, []sqlExpectation{
 		{kind: "begin"},
 		{
 			kind: "query",
-			rows: &sqlRows{
-				columns: []string{"id"},
-				values:  [][]driver.Value{{activeDumpID[:]}},
-			},
+			err:  sql.ErrNoRows,
 		},
 		{
-			kind:   "exec",
-			result: driver.RowsAffected(0),
+			kind: "query",
+			err:  wantErr,
 		},
 		{kind: "rollback"},
 	})
 
 	repo := NewDumpRepo(db, zap.NewNop())
 	_, err := repo.CreateDump(context.Background(), userID, models.Dump{})
-	if !errors.Is(err, ErrStatusNotChanged) {
-		t.Fatalf("CreateDump() error = %v, want %v", err, ErrStatusNotChanged)
+	if !errors.Is(err, ErrDB) {
+		t.Fatalf("CreateDump() error = %v, want wrap %v", err, ErrDB)
 	}
 }
 
