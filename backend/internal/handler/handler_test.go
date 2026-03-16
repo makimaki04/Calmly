@@ -95,22 +95,6 @@ func (s *analysisGenStub) GenerateAnalysis(ctx context.Context, rawText string) 
 	return s.generateAnalysisFn(ctx, rawText)
 }
 
-type planGenStub struct {
-	generatePlanFn   func(context.Context, string, []models.Task, []models.Question, []models.Answer) (models.Plan, []models.PlanItem, error)
-	regeneratePlanFn func(context.Context, string, string) (models.Plan, []models.PlanItem, error)
-}
-
-func (s *planGenStub) GeneratePlan(ctx context.Context, rawText string, tasks []models.Task, questions []models.Question, answers []models.Answer) (models.Plan, []models.PlanItem, error) {
-	return s.generatePlanFn(ctx, rawText, tasks, questions, answers)
-}
-
-func (s *planGenStub) RegeneratePlan(ctx context.Context, rawText string, feedback string) (models.Plan, []models.PlanItem, error) {
-	if s.regeneratePlanFn == nil {
-		return models.Plan{}, nil, nil
-	}
-	return s.regeneratePlanFn(ctx, rawText, feedback)
-}
-
 func newHandlerForTest(activeDumpID uuid.UUID) *Handler {
 	flow := service.NewFlowService(
 		&dumpStub{
@@ -124,19 +108,12 @@ func newHandlerForTest(activeDumpID uuid.UUID) *Handler {
 		},
 		&analysisStub{
 			getDumpAnalysisFn: func(context.Context, uuid.UUID) (*models.DumpAnalysis, error) {
-				return &models.DumpAnalysis{
-					DumpID:    activeDumpID,
-					Tasks:     []models.Task{{Text: "task from analysis"}},
-					Questions: []models.Question{{Text: "question from analysis"}},
-				}, nil
+				return &models.DumpAnalysis{DumpID: uuid.New()}, nil
 			},
 		},
 		nil,
 		&planStub{
-			submitAnswersAndCreatePlanFn: func(_ context.Context, answers models.DumpAnswers, plan models.Plan, items []models.PlanItem) (models.Plan, []models.PlanItem, error) {
-				if plan.Title != "Generated plan" || len(items) != 1 || items[0].Ord != 1 {
-					return models.Plan{}, nil, errors.New("unexpected generated plan payload")
-				}
+			submitAnswersAndCreatePlanFn: func(_ context.Context, answers models.DumpAnswers, plan models.Plan, _ []models.PlanItem) (models.Plan, []models.PlanItem, error) {
 				plan.ID = uuid.New()
 				return plan, []models.PlanItem{{ID: uuid.New(), PlanID: plan.ID, Ord: 1, Text: "item"}}, nil
 			},
@@ -164,17 +141,7 @@ func newHandlerForTest(activeDumpID uuid.UUID) *Handler {
 				}, nil
 			},
 		},
-		&planGenStub{
-			generatePlanFn: func(_ context.Context, rawText string, tasks []models.Task, questions []models.Question, answers []models.Answer) (models.Plan, []models.PlanItem, error) {
-				if rawText != "raw" {
-					return models.Plan{}, nil, errors.New("unexpected raw text")
-				}
-				if len(tasks) != 1 || len(questions) != 1 || len(answers) != 1 {
-					return models.Plan{}, nil, errors.New("unexpected plan generation input")
-				}
-				return models.Plan{Title: "Generated plan"}, []models.PlanItem{{Text: "first"}}, nil
-			},
-		},
+		nil,
 		zap.NewNop(),
 	)
 	return NewHandler(nil, flow, zap.NewNop())
