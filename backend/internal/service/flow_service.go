@@ -20,7 +20,7 @@ type FlowService struct {
 	planSvc     Plan
 	planItemSvc PlanItem
 	analysisGen llm.AnalysisGenerator
-	plangen     llm.PlanGenerator
+	planGen     llm.PlanGenerator
 	logger      *zap.Logger
 }
 
@@ -31,7 +31,7 @@ func NewFlowService(
 	planSvc Plan,
 	planItemSvc PlanItem,
 	analysisGen llm.AnalysisGenerator,
-	plangen llm.PlanGenerator,
+	planGen llm.PlanGenerator,
 	logger *zap.Logger,
 ) *FlowService {
 	return &FlowService{
@@ -41,7 +41,7 @@ func NewFlowService(
 		planSvc:     planSvc,
 		planItemSvc: planItemSvc,
 		analysisGen: analysisGen,
-		plangen:     plangen,
+		planGen:     planGen,
 		logger:      logger.With(zap.String("component", "service")),
 	}
 }
@@ -80,6 +80,7 @@ var (
 	ErrDumpNotBelongUser       = errors.New("dump does not belong to current user session")
 	ErrAnalysisNotFound        = errors.New("invalid session state: analysis is missing")
 	ErrAnswersAlreadySubmitted = errors.New("answers already submitted")
+	ErrEmpryDumpRawText        = errors.New("dump raw text empty")
 )
 
 func (f *FlowService) SubmitAnswers(ctx context.Context, userID uuid.UUID, answers models.DumpAnswers) (models.Plan, []models.PlanItem, error) {
@@ -96,6 +97,10 @@ func (f *FlowService) SubmitAnswers(ctx context.Context, userID uuid.UUID, answe
 		return models.Plan{}, []models.PlanItem{}, ErrDumpNotBelongUser
 	}
 
+	if activeDump.RawText == nil {
+		return models.Plan{}, []models.PlanItem{}, ErrEmpryDumpRawText
+	}
+
 	analysis, err := f.analysisSvc.GetDumpAnalysis(ctx, activeDump.ID)
 	if err != nil {
 		return models.Plan{}, []models.PlanItem{}, fmt.Errorf("get dump analysis: %w", err)
@@ -105,18 +110,19 @@ func (f *FlowService) SubmitAnswers(ctx context.Context, userID uuid.UUID, answe
 		return models.Plan{}, []models.PlanItem{}, ErrAnalysisNotFound
 	}
 
-	_ = analysis
-	_ = activeDump.RawText
-	// LLM generate plan here using dump.raw_text, analysis and answers
-
-	plan := models.Plan{
-		DumpID: activeDump.ID,
-		Title:  "Plan",
+	plan, planItems, err := f.planGen.GeneratePlan(ctx, *activeDump.RawText, analysis.Tasks, analysis.Questions, answers.Answers)
+	if err != nil {
+		log.Error("Submit answers and generate plan failed", zap.Error(err), zap.String("dump_id", activeDump.ID.String()))
+		return models.Plan{}, []models.PlanItem{}, fmt.Errorf("generate plan: %w", err)
 	}
 
-	mockPlanItems := []models.PlanItem{}
+	plan.DumpID = activeDump.ID
 
-	plan, items, err := f.planSvc.SubmitAnswersAndCreatePlan(ctx, answers, plan, mockPlanItems)
+	for i := range planItems {
+		planItems[i].Ord = i + 1
+	}
+
+	plan, items, err := f.planSvc.SubmitAnswersAndCreatePlan(ctx, answers, plan, planItems)
 	if err != nil {
 		if errors.Is(err, repository.ErrAnswersUniqueViolation) {
 			return models.Plan{}, []models.PlanItem{}, ErrAnswersAlreadySubmitted

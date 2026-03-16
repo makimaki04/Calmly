@@ -142,7 +142,7 @@ var ErrAnswersUniqueViolation = errors.New("answers already exists")
 
 func (r *PlanRepository) SubmitAnswersAndCreatePlan(ctx context.Context, answers models.DumpAnswers, plan models.Plan, planItems []models.PlanItem) (models.Plan, []models.PlanItem, error) {
 	log := r.logger.With(
-		zap.String("operation", "finalize_selected_plan"),
+		zap.String("operation", "submit_answers_and_create_plan"),
 		zap.String("dump_id", answers.DumpID.String()),
 	)
 
@@ -200,9 +200,11 @@ func (r *PlanRepository) SubmitAnswersAndCreatePlan(ctx context.Context, answers
 
 	pItems := make([]models.PlanItem, 0, len(planItems))
 	for _, item := range planItems {
+		item.PlanID = plan.ID
+
 		var id uuid.UUID
 		var createdAt time.Time
-		err = tx.QueryRowContext(ctx, insertPlanItemQuery, item.PlanID, item.Ord, item.Text).Scan(&id, &createdAt)
+		err = tx.QueryRowContext(ctx, insertPlanItemQuery, item.PlanID, item.Ord, item.Text, item.Priority).Scan(&id, &createdAt)
 		if err != nil {
 			log.Error("Create plan item failed", zap.Error(err))
 			err = fmt.Errorf("insert plan item: %w", checkErr(err))

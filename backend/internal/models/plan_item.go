@@ -12,6 +12,7 @@ type PlanItem struct {
 	PlanID    uuid.UUID
 	Ord       int
 	Text      string
+	Priority  string
 	Done      bool
 	CreatedAt time.Time
 	DeletedAt *time.Time
@@ -25,6 +26,7 @@ func ConvertToPlanItemsDTO(items []PlanItem) []contract.PlanItemDTO {
 			PlanID:    i.PlanID,
 			Ord:       i.Ord,
 			Text:      i.Text,
+			Priority:  i.Priority,
 			Done:      i.Done,
 			CreatedAt: i.CreatedAt,
 		}

@@ -88,7 +88,7 @@ const (
 	`
 )
 
-func (r *DumpRepository) CreateDump(ctx context.Context, userID uuid.UUID, dump models.Dump) (uuid.UUID, error) {
+func (r *DumpRepository) CreateDump(ctx context.Context, userID uuid.UUID, dump models.Dump) (id uuid.UUID, err error) {
 	log := r.logger.With(zap.String("operation", "create_dump"))
 
 	log.Info("Create dump started")
@@ -139,8 +139,6 @@ func (r *DumpRepository) CreateDump(ctx context.Context, userID uuid.UUID, dump 
 			return uuid.Nil, ErrStatusNotChanged
 		}
 	}
-
-	var id uuid.UUID
 
 	if err := tx.QueryRowContext(
 		ctx,
