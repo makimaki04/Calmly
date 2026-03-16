@@ -16,3 +16,13 @@ type AnalysisTaskResponse struct {
 type AnalysisQuestionResponse struct {
 	Text string `json:"text"`
 }
+
+type SubmitAnswersResponse struct {
+	PlanTitle string     `json:"plan_title"`
+	Items     []PlanItem `json:"items"`
+}
+
+type PlanItem struct {
+	Text     string `json:"text"`
+	Priority string `json:"priority"`
+}

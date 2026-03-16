@@ -161,7 +161,7 @@ func TestValidateAndNormalizeAnalysisResponse(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := tt.input
-			err := validateAndNormalizeAnalysisResponse(&got)
+			err := valAndNormAnalysisResp(&got)
 			if !errors.Is(err, tt.wantErr) {
 				t.Fatalf("validateAndNormalizeAnalysisResponse() error = %v, want %v", err, tt.wantErr)
 			}

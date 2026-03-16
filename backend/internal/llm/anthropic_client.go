@@ -80,7 +80,7 @@ func (c *AnthropicClient) GenerateAnalysis(ctx context.Context, rawText string) 
 		return models.DumpAnalysis{}, fmt.Errorf("decode JSON: %w", err)
 	}
 
-	if err := validateAndNormalizeAnalysisResponse(&llmAnalysis); err != nil {
+	if err := valAndNormAnalysisResp(&llmAnalysis); err != nil {
 		log.Error("validate analysis response", zap.Error(err))
 		return models.DumpAnalysis{}, err
 	}
@@ -104,7 +104,7 @@ var (
 	ErrEmptyQuote          = errors.New("empty quote value")
 )
 
-func validateAndNormalizeAnalysisResponse(llmAnalysis *AnalysisResponse) error {
+func valAndNormAnalysisResp(llmAnalysis *AnalysisResponse) error {
 	for i, t := range llmAnalysis.Tasks {
 		t.Text = strings.TrimSpace(t.Text)
 		t.TaskPriority = strings.TrimSpace(t.TaskPriority)
@@ -205,11 +205,137 @@ func mapAnalysisResponseToDomain(llmAnalysis AnalysisResponse) models.DumpAnalys
 func (c *AnthropicClient) GeneratePlan(
 	ctx context.Context,
 	rawText string,
+	tasks []models.Task,
 	questions []models.Question,
 	answers []models.Answer,
 ) (models.Plan, []models.PlanItem, error) {
+	log := c.logger.With(
+		zap.String("operation", "generate_plan"),
+		zap.Int("raw_text_len", len(rawText)),
+		zap.Int("tasks_count", len(tasks)),
+		zap.Int("questions_count", len(questions)),
+		zap.Int("answers_count", len(answers)),
+	)
 
-	return models.Plan{}, []models.PlanItem{}, nil
+	log.Info("Submit answers and generate plan started")
+
+	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+
+	tasksStr, err := prettyJSONString(tasks)
+	if err != nil {
+		return models.Plan{}, []models.PlanItem{}, fmt.Errorf("format tasks to string: %w", err)
+	}
+
+	questionsStr, err := prettyJSONString(questions)
+	if err != nil {
+		return models.Plan{}, []models.PlanItem{}, fmt.Errorf("format questions to string: %w", err)
+	}
+
+	answersStr, err := prettyJSONString(answers)
+	if err != nil {
+		return models.Plan{}, []models.PlanItem{}, fmt.Errorf("format answers to string: %w", err)
+	}
+
+	systemPrompt, userPrompt := BuildAnswersPrompt(rawText, tasksStr, questionsStr, answersStr)
+
+	message, err := c.client.Messages.New(
+		ctx,
+		anthropic.MessageNewParams{
+			MaxTokens: 900,
+			Model:     anthropic.ModelClaudeSonnet4_6,
+			System: []anthropic.TextBlockParam{
+				{Text: systemPrompt},
+			},
+			Messages: []anthropic.MessageParam{
+				anthropic.NewUserMessage(anthropic.NewTextBlock(userPrompt)),
+			},
+		},
+	)
+	if err != nil {
+		log.Error("Generate plan failed", zap.Error(err))
+		return models.Plan{}, []models.PlanItem{}, fmt.Errorf("request plan from anthropic: %w", err)
+	}
+
+	content := message.Content
+	parsedLLMText, err := ParseLLMResponse(content)
+	if err != nil {
+		log.Error("parse llm response to string", zap.Error(err))
+		return models.Plan{}, []models.PlanItem{}, err
+	}
+
+	extractedLLMText, err := ExtractJSONCandidate(parsedLLMText)
+	if err != nil {
+		log.Debug("invalid llm text after extraction", zap.String("llm raw text", string(parsedLLMText)))
+		return models.Plan{}, []models.PlanItem{}, err
+	}
+
+	llmPlan, err := decodeJSON[SubmitAnswersResponse](extractedLLMText)
+	if err != nil {
+		log.Error("decode extracted llm text", zap.Error(err))
+		return models.Plan{}, []models.PlanItem{}, fmt.Errorf("decode JSON: %w", err)
+	}
+
+	if err := valAndNormSubmitAnswersResp(&llmPlan); err != nil {
+		log.Error("validate submit answers response", zap.Error(err))
+		return models.Plan{}, []models.PlanItem{}, err
+	}
+
+	plan, planItems := mapSubmitAnswersResponseToDomain(llmPlan)
+
+	return plan, planItems, nil
+}
+
+var (
+	ErrEmptyPlanTitle      = errors.New("empty plan title value")
+	ErrEmptyItemFields     = errors.New("item contains empty required fields")
+	ErrInvalidItemPriority = errors.New("invalid task priority value")
+)
+
+func valAndNormSubmitAnswersResp(planResponse *SubmitAnswersResponse) error {
+	planResponse.PlanTitle = strings.TrimSpace(planResponse.PlanTitle)
+	if planResponse.PlanTitle == "" {
+		return ErrEmptyPlanTitle
+	}
+
+	for i, item := range planResponse.Items {
+		item.Text = strings.TrimSpace(item.Text)
+		item.Priority = strings.TrimSpace(item.Priority)
+
+		if item.Text == "" || item.Priority == "" {
+			return ErrEmptyItemFields
+		}
+
+		switch item.Priority {
+		case "low":
+		case "medium":
+		case "high":
+		default:
+			return ErrInvalidItemPriority
+		}
+
+		planResponse.Items[i] = item
+	}
+
+	return nil
+}
+
+func mapSubmitAnswersResponseToDomain(response SubmitAnswersResponse) (models.Plan, []models.PlanItem) {
+	plan := models.Plan{
+		Title: response.PlanTitle,
+	}
+
+	planItems := make([]models.PlanItem, 0, len(response.Items))
+	for _, i := range response.Items {
+		planItem := models.PlanItem{
+			Text:     i.Text,
+			Priority: i.Priority,
+		}
+
+		planItems = append(planItems, planItem)
+	}
+
+	return plan, planItems
 }
 
 func (c *AnthropicClient) RegeneratePlan(
@@ -310,4 +436,13 @@ func decodeJSON[T any](text []byte) (T, error) {
 	}
 
 	return result, nil
+}
+
+func prettyJSONString(data any) (string, error) {
+	res, err := json.MarshalIndent(data, "	", "")
+	if err != nil {
+		return "", err
+	}
+
+	return string(res), nil
 }

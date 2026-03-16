@@ -1,0 +1,4 @@
+ALTER TABLE plan_items
+DROP COLUMN IF EXISTS priority;
+
+DROP TYPE IF EXISTS priority;

@@ -95,6 +95,22 @@ func (s *analysisGenStub) GenerateAnalysis(ctx context.Context, rawText string) 
 	return s.generateAnalysisFn(ctx, rawText)
 }
 
+type planGenStub struct {
+	generatePlanFn   func(context.Context, string, []models.Task, []models.Question, []models.Answer) (models.Plan, []models.PlanItem, error)
+	regeneratePlanFn func(context.Context, string, string) (models.Plan, []models.PlanItem, error)
+}
+
+func (s *planGenStub) GeneratePlan(ctx context.Context, rawText string, tasks []models.Task, questions []models.Question, answers []models.Answer) (models.Plan, []models.PlanItem, error) {
+	return s.generatePlanFn(ctx, rawText, tasks, questions, answers)
+}
+
+func (s *planGenStub) RegeneratePlan(ctx context.Context, rawText string, feedback string) (models.Plan, []models.PlanItem, error) {
+	if s.regeneratePlanFn == nil {
+		return models.Plan{}, nil, nil
+	}
+	return s.regeneratePlanFn(ctx, rawText, feedback)
+}
+
 func TestFlowService_StartSession(t *testing.T) {
 	userID := uuid.New()
 	dumpID := uuid.New()
@@ -193,7 +209,8 @@ func TestFlowService_SubmitAnswers(t *testing.T) {
 			name: "analysis missing",
 			dumpSvc: &dumpStub{
 				getUserDumpFn: func(context.Context, uuid.UUID) (*models.Dump, error) {
-					return &models.Dump{ID: dumpID}, nil
+					raw := "raw"
+					return &models.Dump{ID: dumpID, RawText: &raw}, nil
 				},
 			},
 			analysis: &analysisStub{
@@ -201,6 +218,17 @@ func TestFlowService_SubmitAnswers(t *testing.T) {
 			},
 			planSvc: &planStub{},
 			wantErr: ErrAnalysisNotFound,
+		},
+		{
+			name: "raw text missing",
+			dumpSvc: &dumpStub{
+				getUserDumpFn: func(context.Context, uuid.UUID) (*models.Dump, error) {
+					return &models.Dump{ID: dumpID, RawText: nil}, nil
+				},
+			},
+			analysis: &analysisStub{},
+			planSvc:  &planStub{},
+			wantErr:  ErrEmpryDumpRawText,
 		},
 		{
 			name: "answers already submitted",
@@ -226,7 +254,11 @@ func TestFlowService_SubmitAnswers(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			svc := NewFlowService(tt.dumpSvc, tt.analysis, nil, tt.planSvc, &planItemStub{}, &analysisGenStub{}, nil, zap.NewNop())
+			svc := NewFlowService(tt.dumpSvc, tt.analysis, nil, tt.planSvc, &planItemStub{}, &analysisGenStub{}, &planGenStub{
+				generatePlanFn: func(context.Context, string, []models.Task, []models.Question, []models.Answer) (models.Plan, []models.PlanItem, error) {
+					return models.Plan{}, nil, nil
+				},
+			}, zap.NewNop())
 			_, _, err := svc.SubmitAnswers(context.Background(), userID, models.DumpAnswers{
 				DumpID:  dumpID,
 				Answers: []models.Answer{{QuestionID: questionID, Text: "answer"}},
@@ -253,22 +285,50 @@ func TestFlowService_SubmitAnswers_Success(t *testing.T) {
 		},
 		&analysisStub{
 			getDumpAnalysisFn: func(context.Context, uuid.UUID) (*models.DumpAnalysis, error) {
-				return &models.DumpAnalysis{DumpID: dumpID}, nil
+				return &models.DumpAnalysis{
+					DumpID:    dumpID,
+					Tasks:     []models.Task{{Text: "task from analysis"}},
+					Questions: []models.Question{{Text: "question from analysis"}},
+				}, nil
 			},
 		},
 		nil,
 		&planStub{
 			submitAnswersAndCreatePlanFn: func(_ context.Context, answers models.DumpAnswers, plan models.Plan, items []models.PlanItem) (models.Plan, []models.PlanItem, error) {
-				if answers.DumpID != dumpID || plan.DumpID != dumpID || plan.Title != "Plan" || len(items) != 0 {
+				if answers.DumpID != dumpID || plan.DumpID != dumpID || plan.Title != "Generated plan" {
 					t.Fatalf("unexpected input: answers=%+v plan=%+v items=%+v", answers, plan, items)
 				}
+				if len(items) != 2 || items[0].Ord != 1 || items[1].Ord != 2 {
+					t.Fatalf("unexpected generated items: %+v", items)
+				}
 				plan.ID = planID
-				return plan, []models.PlanItem{{ID: uuid.New(), PlanID: planID, Ord: 1, Text: "item"}}, nil
+				return plan, []models.PlanItem{{ID: uuid.New(), PlanID: planID, Ord: 1, Text: "item-1"}}, nil
 			},
 		},
 		&planItemStub{},
 		&analysisGenStub{},
-		nil,
+		&planGenStub{
+			generatePlanFn: func(_ context.Context, rawText string, tasks []models.Task, questions []models.Question, answers []models.Answer) (models.Plan, []models.PlanItem, error) {
+				if rawText != "raw" {
+					t.Fatalf("GeneratePlan() rawText = %q", rawText)
+				}
+				if len(tasks) != 1 || tasks[0].Text != "task from analysis" {
+					t.Fatalf("GeneratePlan() tasks = %+v", tasks)
+				}
+				if len(questions) != 1 || questions[0].Text != "question from analysis" {
+					t.Fatalf("GeneratePlan() questions = %+v", questions)
+				}
+				if len(answers) != 1 || answers[0].QuestionID != questionID {
+					t.Fatalf("GeneratePlan() answers = %+v", answers)
+				}
+				return models.Plan{
+						Title: "Generated plan",
+					}, []models.PlanItem{
+						{Text: "first"},
+						{Text: "second"},
+					}, nil
+			},
+		},
 		zap.NewNop(),
 	)
 

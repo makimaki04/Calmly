@@ -27,11 +27,12 @@ func NewPlanItemRepo(db *sql.DB, logger *zap.Logger) *PlanItemRepository {
 const (
 	insertPlanItemQuery = `
 		INSERT INTO plan_items (
-			plan_id, ord, text, created_at
+			plan_id, ord, text, priority, created_at
 		) VALUES (
 			$1,
 			$2,
 			$3,
+			$4,
 			now()
 		)
 		RETURNING id, created_at;
@@ -61,7 +62,7 @@ const (
 		WHERE pi.plan_id = $1 AND pi.id = v.id AND deleted_at IS NULL;
 	`
 	getItemsByPlanIdsQuery = `
-		SELECT id, plan_id, ord, text, done, created_at
+		SELECT id, plan_id, ord, text, priority, done, created_at
 		FROM plan_items
 		WHERE plan_id = ANY($1) AND deleted_at IS NULL
 		ORDER BY plan_id, ord;
@@ -108,7 +109,7 @@ func (r *PlanItemRepository) CreateItems(ctx context.Context, items []models.Pla
 	for _, item := range items {
 		var id uuid.UUID
 		var createdAt time.Time
-		err = tx.QueryRowContext(ctx, insertPlanItemQuery, item.PlanID, item.Ord, item.Text).Scan(&id, &createdAt)
+		err = tx.QueryRowContext(ctx, insertPlanItemQuery, item.PlanID, item.Ord, item.Text, item.Priority).Scan(&id, &createdAt)
 		if err != nil {
 			log.Error("Create plan item failed", zap.Error(err))
 			err = fmt.Errorf("insert plan item: %w", checkErr(err))
@@ -133,7 +134,7 @@ func (r *PlanItemRepository) AddItem(ctx context.Context, item models.PlanItem) 
 
 	var id uuid.UUID
 	var createdAt time.Time
-	err := r.db.QueryRowContext(ctx, insertPlanItemQuery, item.PlanID, item.Ord, item.Text).Scan(&id, &createdAt)
+	err := r.db.QueryRowContext(ctx, insertPlanItemQuery, item.PlanID, item.Ord, item.Text, item.Priority).Scan(&id, &createdAt)
 	if err != nil {
 		log.Error("Add plan item failed", zap.Error(err))
 		return models.PlanItem{}, fmt.Errorf("insert plan item: %w", checkErr(err))
@@ -165,6 +166,7 @@ func (r *PlanItemRepository) GetItemsByPlanIDs(ctx context.Context, planIDs []uu
 			&item.PlanID,
 			&item.Ord,
 			&item.Text,
+			&item.Priority,
 			&item.Done,
 			&item.CreatedAt,
 		); err != nil {
