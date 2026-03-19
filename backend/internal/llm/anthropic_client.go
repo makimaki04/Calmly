@@ -237,7 +237,12 @@ func (c *AnthropicClient) GeneratePlan(
 		return models.Plan{}, []models.PlanItem{}, fmt.Errorf("format answers to string: %w", err)
 	}
 
-	systemPrompt, userPrompt := BuildAnswersPrompt(rawText, tasksStr, questionsStr, answersStr)
+	systemPrompt, userPrompt := BuildAnswersPrompt(
+		rawText,
+		tasksStr,
+		questionsStr,
+		answersStr,
+	)
 
 	message, err := c.client.Messages.New(
 		ctx,
@@ -276,12 +281,18 @@ func (c *AnthropicClient) GeneratePlan(
 		return models.Plan{}, []models.PlanItem{}, fmt.Errorf("decode JSON: %w", err)
 	}
 
-	if err := valAndNormSubmitAnswersResp(&llmPlan); err != nil {
+	if err := valAndNormSubmitPlanResp(&llmPlan); err != nil {
 		log.Error("validate submit answers response", zap.Error(err))
 		return models.Plan{}, []models.PlanItem{}, err
 	}
 
-	plan, planItems := mapSubmitAnswersResponseToDomain(llmPlan)
+	plan, planItems := mapResponseToDomainPlan(llmPlan)
+
+	log.Info(
+		"Analysis generated",
+		zap.String("plan_title", plan.Title),
+		zap.Int("items_count", len(planItems)),
+	)
 
 	return plan, planItems, nil
 }
@@ -292,7 +303,7 @@ var (
 	ErrInvalidItemPriority = errors.New("invalid task priority value")
 )
 
-func valAndNormSubmitAnswersResp(planResponse *SubmitAnswersResponse) error {
+func valAndNormSubmitPlanResp(planResponse *SubmitAnswersResponse) error {
 	planResponse.PlanTitle = strings.TrimSpace(planResponse.PlanTitle)
 	if planResponse.PlanTitle == "" {
 		return ErrEmptyPlanTitle
@@ -320,7 +331,7 @@ func valAndNormSubmitAnswersResp(planResponse *SubmitAnswersResponse) error {
 	return nil
 }
 
-func mapSubmitAnswersResponseToDomain(response SubmitAnswersResponse) (models.Plan, []models.PlanItem) {
+func mapResponseToDomainPlan(response SubmitAnswersResponse) (models.Plan, []models.PlanItem) {
 	plan := models.Plan{
 		Title: response.PlanTitle,
 	}
@@ -340,10 +351,103 @@ func mapSubmitAnswersResponseToDomain(response SubmitAnswersResponse) (models.Pl
 
 func (c *AnthropicClient) RegeneratePlan(
 	ctx context.Context,
-	rawtext string,
+	rawText string,
+	analysis models.DumpAnalysis,
+	answers models.DumpAnswers,
+	prevPlan models.Plan,
+	prevPlanItems []models.PlanItem,
 	feedback string,
 ) (models.Plan, []models.PlanItem, error) {
-	return models.Plan{}, []models.PlanItem{}, nil
+	log := c.logger.With(
+		zap.String("operation", "regenerate_plan"),
+	)
+
+	log.Info("Regenerate plan started")
+
+	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+
+	tasksStr, err := prettyJSONString(analysis.Tasks)
+	if err != nil {
+		return models.Plan{}, []models.PlanItem{}, fmt.Errorf("format tasks to string: %w", err)
+	}
+
+	questionsStr, err := prettyJSONString(analysis.Questions)
+	if err != nil {
+		return models.Plan{}, []models.PlanItem{}, fmt.Errorf("format questions to string: %w", err)
+	}
+
+	answersStr, err := prettyJSONString(answers)
+	if err != nil {
+		return models.Plan{}, []models.PlanItem{}, fmt.Errorf("format answers to string: %w", err)
+	}
+
+	itemsStr, err := prettyJSONString(prevPlanItems)
+	if err != nil {
+		return models.Plan{}, []models.PlanItem{}, fmt.Errorf("format previous plan items to string: %w", err)
+	}
+
+	sytemPrompt, userPrompt := BuildFeedbackPrompt(
+		rawText,
+		tasksStr,
+		questionsStr,
+		answersStr,
+		prevPlan.Title,
+		itemsStr,
+		feedback,
+	)
+
+	message, err := c.client.Messages.New(
+		ctx,
+		anthropic.MessageNewParams{
+			MaxTokens: 1200,
+			Model:     anthropic.ModelClaudeSonnet4_6,
+			System: []anthropic.TextBlockParam{
+				{Text: sytemPrompt},
+			},
+			Messages: []anthropic.MessageParam{
+				anthropic.NewUserMessage(anthropic.NewTextBlock(userPrompt)),
+			},
+		},
+	)
+	if err != nil {
+		log.Error("Regenerate plan failed", zap.Error(err))
+		return models.Plan{}, []models.PlanItem{}, fmt.Errorf("request new plan from anthropic: %w", err)
+	}
+
+	content := message.Content
+	parsedLLMText, err := ParseLLMResponse(content)
+	if err != nil {
+		log.Error("parse llm response to string", zap.Error(err))
+		return models.Plan{}, []models.PlanItem{}, err
+	}
+
+	extractedLLMText, err := ExtractJSONCandidate(parsedLLMText)
+	if err != nil {
+		log.Debug("invalid llm text after extraction", zap.String("llm raw text", string(parsedLLMText)))
+		return models.Plan{}, []models.PlanItem{}, err
+	}
+
+	llmPlan, err := decodeJSON[SubmitAnswersResponse](extractedLLMText)
+	if err != nil {
+		log.Error("decode extracted llm text", zap.Error(err))
+		return models.Plan{}, []models.PlanItem{}, fmt.Errorf("decode JSON: %w", err)
+	}
+
+	if err := valAndNormSubmitPlanResp(&llmPlan); err != nil {
+		log.Error("validate submit answers response", zap.Error(err))
+		return models.Plan{}, []models.PlanItem{}, err
+	}
+
+	plan, planItems := mapResponseToDomainPlan(llmPlan)
+
+	log.Info(
+		"Plan generated",
+		zap.String("plan_title", plan.Title),
+		zap.Int("items_count", len(planItems)),
+	)
+
+	return plan, planItems, nil
 }
 
 var ErrEmptyLLMResponse = errors.New("empty llm response")

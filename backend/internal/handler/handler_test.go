@@ -47,11 +47,22 @@ func (s *analysisStub) GetDumpAnalysis(ctx context.Context, dumpID uuid.UUID) (*
 	return s.getDumpAnalysisFn(ctx, dumpID)
 }
 
+type answersStub struct {
+	getAnswersFn func(context.Context, uuid.UUID) (*models.DumpAnswers, error)
+}
+
+func (s *answersStub) SaveAnswers(context.Context, models.DumpAnswers) error { return nil }
+func (s *answersStub) GetAnswers(ctx context.Context, dumpID uuid.UUID) (*models.DumpAnswers, error) {
+	return s.getAnswersFn(ctx, dumpID)
+}
+
 type planStub struct {
 	submitAnswersAndCreatePlanFn func(context.Context, models.DumpAnswers, models.Plan, []models.PlanItem) (models.Plan, []models.PlanItem, error)
+	createNewPlanCandidateFn     func(context.Context, models.Plan, []models.PlanItem) (models.Plan, []models.PlanItem, error)
 	createPlanFn                 func(context.Context, uuid.UUID, string) (uuid.UUID, error)
 	savePlanFn                   func(context.Context, uuid.UUID, uuid.UUID) error
 	getDumpPlansFn               func(context.Context, uuid.UUID) ([]models.Plan, error)
+	getLastGeneratedPlanFn       func(context.Context, uuid.UUID) (models.Plan, error)
 }
 
 func (s *planStub) CreatePlan(ctx context.Context, dumpID uuid.UUID, title string) (uuid.UUID, error) {
@@ -60,11 +71,20 @@ func (s *planStub) CreatePlan(ctx context.Context, dumpID uuid.UUID, title strin
 func (s *planStub) SubmitAnswersAndCreatePlan(ctx context.Context, answers models.DumpAnswers, plan models.Plan, items []models.PlanItem) (models.Plan, []models.PlanItem, error) {
 	return s.submitAnswersAndCreatePlanFn(ctx, answers, plan, items)
 }
+func (s *planStub) CreateNewPlanCandidate(ctx context.Context, plan models.Plan, items []models.PlanItem) (models.Plan, []models.PlanItem, error) {
+	if s.createNewPlanCandidateFn == nil {
+		return models.Plan{}, nil, nil
+	}
+	return s.createNewPlanCandidateFn(ctx, plan, items)
+}
 func (s *planStub) SavePlan(ctx context.Context, dumpID uuid.UUID, planID uuid.UUID) error {
 	return s.savePlanFn(ctx, dumpID, planID)
 }
 func (s *planStub) GetDumpPlans(ctx context.Context, dumpID uuid.UUID) ([]models.Plan, error) {
 	return s.getDumpPlansFn(ctx, dumpID)
+}
+func (s *planStub) GetLastGeneratedPlan(ctx context.Context, dumpID uuid.UUID) (models.Plan, error) {
+	return s.getLastGeneratedPlanFn(ctx, dumpID)
 }
 func (s *planStub) GetUserSavedPlans(context.Context, uuid.UUID) ([]models.Plan, error) { return nil, nil }
 func (s *planStub) DeleteSavedPlan(context.Context, uuid.UUID) error                     { return nil }
@@ -97,21 +117,24 @@ func (s *analysisGenStub) GenerateAnalysis(ctx context.Context, rawText string) 
 
 type planGenStub struct {
 	generatePlanFn   func(context.Context, string, []models.Task, []models.Question, []models.Answer) (models.Plan, []models.PlanItem, error)
-	regeneratePlanFn func(context.Context, string, string) (models.Plan, []models.PlanItem, error)
+	regeneratePlanFn func(context.Context, string, models.DumpAnalysis, models.DumpAnswers, models.Plan, []models.PlanItem, string) (models.Plan, []models.PlanItem, error)
 }
 
 func (s *planGenStub) GeneratePlan(ctx context.Context, rawText string, tasks []models.Task, questions []models.Question, answers []models.Answer) (models.Plan, []models.PlanItem, error) {
 	return s.generatePlanFn(ctx, rawText, tasks, questions, answers)
 }
 
-func (s *planGenStub) RegeneratePlan(ctx context.Context, rawText string, feedback string) (models.Plan, []models.PlanItem, error) {
+func (s *planGenStub) RegeneratePlan(ctx context.Context, rawText string, analysis models.DumpAnalysis, answers models.DumpAnswers, plan models.Plan, planItems []models.PlanItem, feedback string) (models.Plan, []models.PlanItem, error) {
 	if s.regeneratePlanFn == nil {
 		return models.Plan{}, nil, nil
 	}
-	return s.regeneratePlanFn(ctx, rawText, feedback)
+	return s.regeneratePlanFn(ctx, rawText, analysis, answers, plan, planItems, feedback)
 }
 
 func newHandlerForTest(activeDumpID uuid.UUID) *Handler {
+	lastPlanID := uuid.New()
+	questionID := uuid.New()
+
 	flow := service.NewFlowService(
 		&dumpStub{
 			createDumpFn: func(context.Context, uuid.UUID, string) (uuid.UUID, error) { return uuid.New(), nil },
@@ -127,11 +150,18 @@ func newHandlerForTest(activeDumpID uuid.UUID) *Handler {
 				return &models.DumpAnalysis{
 					DumpID:    activeDumpID,
 					Tasks:     []models.Task{{Text: "task from analysis"}},
-					Questions: []models.Question{{Text: "question from analysis"}},
+					Questions: []models.Question{{ID: questionID, Text: "question from analysis"}},
 				}, nil
 			},
 		},
-		nil,
+		&answersStub{
+			getAnswersFn: func(context.Context, uuid.UUID) (*models.DumpAnswers, error) {
+				return &models.DumpAnswers{
+					DumpID:  activeDumpID,
+					Answers: []models.Answer{{QuestionID: questionID, Text: "answer"}},
+				}, nil
+			},
+		},
 		&planStub{
 			submitAnswersAndCreatePlanFn: func(_ context.Context, answers models.DumpAnswers, plan models.Plan, items []models.PlanItem) (models.Plan, []models.PlanItem, error) {
 				if plan.Title != "Generated plan" || len(items) != 1 || items[0].Ord != 1 {
@@ -140,18 +170,28 @@ func newHandlerForTest(activeDumpID uuid.UUID) *Handler {
 				plan.ID = uuid.New()
 				return plan, []models.PlanItem{{ID: uuid.New(), PlanID: plan.ID, Ord: 1, Text: "item"}}, nil
 			},
-			createPlanFn: func(context.Context, uuid.UUID, string) (uuid.UUID, error) { return uuid.New(), nil },
+			createNewPlanCandidateFn: func(_ context.Context, plan models.Plan, items []models.PlanItem) (models.Plan, []models.PlanItem, error) {
+				if plan.Title != "Regenerated plan" || len(items) != 1 || items[0].Ord != 1 {
+					return models.Plan{}, nil, errors.New("unexpected regenerated plan payload")
+				}
+				plan.ID = uuid.New()
+				return plan, []models.PlanItem{{ID: uuid.New(), PlanID: plan.ID, Ord: 1, Text: "regen item"}}, nil
+			},
+			createPlanFn: func(context.Context, uuid.UUID, string) (uuid.UUID, error) { return uuid.Nil, errors.New("CreatePlan should not be called") },
 			savePlanFn:   func(context.Context, uuid.UUID, uuid.UUID) error { return nil },
 			getDumpPlansFn: func(context.Context, uuid.UUID) ([]models.Plan, error) {
 				return []models.Plan{{ID: uuid.New()}}, nil
 			},
+			getLastGeneratedPlanFn: func(context.Context, uuid.UUID) (models.Plan, error) {
+				return models.Plan{ID: lastPlanID, DumpID: activeDumpID, Title: "Last plan"}, nil
+			},
 		},
 		&planItemStub{
-			createItemsFn: func(context.Context, []models.PlanItem) ([]models.PlanItem, error) {
-				return []models.PlanItem{{ID: uuid.New(), PlanID: uuid.New(), Ord: 1, Text: "item"}}, nil
+			createItemsFn: func(_ context.Context, items []models.PlanItem) ([]models.PlanItem, error) {
+				return nil, errors.New("CreateItems should not be called")
 			},
 			getItemsByPlanIDsFn: func(context.Context, []uuid.UUID) ([]models.PlanItem, error) {
-				return []models.PlanItem{{ID: uuid.New(), PlanID: uuid.New(), Ord: 1, Text: "item"}}, nil
+				return []models.PlanItem{{ID: uuid.New(), PlanID: lastPlanID, Ord: 1, Text: "item"}}, nil
 			},
 		},
 		&analysisGenStub{
@@ -173,6 +213,15 @@ func newHandlerForTest(activeDumpID uuid.UUID) *Handler {
 					return models.Plan{}, nil, errors.New("unexpected plan generation input")
 				}
 				return models.Plan{Title: "Generated plan"}, []models.PlanItem{{Text: "first"}}, nil
+			},
+			regeneratePlanFn: func(_ context.Context, rawText string, analysis models.DumpAnalysis, answers models.DumpAnswers, plan models.Plan, planItems []models.PlanItem, feedback string) (models.Plan, []models.PlanItem, error) {
+				if rawText != "raw" || feedback == "" {
+					return models.Plan{}, nil, errors.New("unexpected regenerate input")
+				}
+				if analysis.DumpID != activeDumpID || answers.DumpID != activeDumpID || plan.ID != lastPlanID || len(planItems) != 1 {
+					return models.Plan{}, nil, errors.New("unexpected regenerate dependencies")
+				}
+				return models.Plan{Title: "Regenerated plan"}, []models.PlanItem{{Text: "regen item"}}, nil
 			},
 		},
 		zap.NewNop(),

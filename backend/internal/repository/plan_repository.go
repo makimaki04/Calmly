@@ -49,6 +49,12 @@ const (
 		WHERE dump_id = $1 AND deleted_at IS NULL
 		ORDER BY created_at ASC;
 	`
+	selectLastPlanByDumpIDQuery = `
+		SELECT id, dump_id, title, created_at
+		FROM plans
+		WHERE dump_id = $1 AND deleted_at IS NULL
+		ORDER BY created_at DESC LIMIT 1;
+	`
 	updateSavedPlanQuery = `
 		UPDATE plans
 		SET 
@@ -138,6 +144,29 @@ func (r *PlanRepository) GetCurrentSessionsPlans(ctx context.Context, dumpID uui
 	return plans, nil
 }
 
+func (r *PlanRepository) GetLastGeneratedPlan(ctx context.Context, dumpID uuid.UUID) (models.Plan, error) {
+	log := r.logger.With(
+		zap.String("operation", "get_last_plan"),
+		zap.String("dump_id", dumpID.String()),
+	)
+
+	log.Info("Get last plan started")
+
+	var plan models.Plan
+	err := r.db.QueryRowContext(ctx, selectLastPlanByDumpIDQuery, dumpID).Scan(
+		&plan.ID,
+		&plan.DumpID,
+		&plan.Title,
+		&plan.CreatedAt,
+	)
+	if err != nil {
+		log.Error("Get plan failed", zap.Error(err))
+		return models.Plan{}, fmt.Errorf("query plan: %w", checkErr(err))
+	}
+
+	return plan, nil
+}
+
 var ErrAnswersUniqueViolation = errors.New("answers already exists")
 
 func (r *PlanRepository) SubmitAnswersAndCreatePlan(ctx context.Context, answers models.DumpAnswers, plan models.Plan, planItems []models.PlanItem) (models.Plan, []models.PlanItem, error) {
@@ -217,6 +246,87 @@ func (r *PlanRepository) SubmitAnswersAndCreatePlan(ctx context.Context, answers
 	}
 
 	return plan, pItems, nil
+}
+
+func (r *PlanRepository) CreateNewPlanCandidate(ctx context.Context, plan models.Plan, planItems []models.PlanItem) (models.Plan, []models.PlanItem, error) {
+	log := r.logger.With(
+		zap.String("operation", "submit_answers_and_create_plan"),
+		zap.String("dump_id", plan.DumpID.String()),
+	)
+
+	log.Info("Create new plan candidate step started")
+
+	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{})
+	if err != nil {
+		log.Error("Begin tx failed", zap.Error(err))
+		return models.Plan{}, []models.PlanItem{}, fmt.Errorf("begin tx: %w", checkErr(err))
+	}
+
+	defer func() {
+		if p := recover(); p != nil {
+			_ = tx.Rollback()
+			panic(p)
+		}
+
+		if err != nil {
+			_ = tx.Rollback()
+			return
+		}
+
+		if commitErr := tx.Commit(); commitErr != nil {
+			_ = tx.Rollback()
+			log.Error("Commit tx failed", zap.Error(commitErr))
+			err = fmt.Errorf("commit tx: %w", commitErr)
+		}
+	}()
+
+	id, err := createPlan(ctx, tx, plan.DumpID, plan.Title)
+	if err != nil {
+		log.Error("Create plan failed", zap.Error(err))
+		return models.Plan{}, []models.PlanItem{}, err
+	}
+
+	plan.ID = id
+
+	pItems, err := createPlanItems(ctx, tx, plan.ID, planItems)
+	if err != nil {
+		log.Error("Create plan item failed", zap.Error(err))
+		return models.Plan{}, []models.PlanItem{}, err
+	}
+
+	return plan, pItems, nil
+}
+
+func createPlan(ctx context.Context, tx *sql.Tx, dumpID uuid.UUID, title string) (uuid.UUID, error) {
+	var id uuid.UUID
+
+	if err := tx.QueryRowContext(ctx, insertPlanQuery, dumpID, title).
+		Scan(&id); err != nil {
+		return uuid.Nil, fmt.Errorf("insert plan: %w", checkErr(err))
+	}
+
+	return id, nil
+}
+
+func createPlanItems(ctx context.Context, tx *sql.Tx, planID uuid.UUID, planItems []models.PlanItem) ([]models.PlanItem, error) {
+	pItems := make([]models.PlanItem, 0, len(planItems))
+	for _, item := range planItems {
+		item.PlanID = planID
+
+		var id uuid.UUID
+		var createdAt time.Time
+		err := tx.QueryRowContext(ctx, insertPlanItemQuery, item.PlanID, item.Ord, item.Text, item.Priority).Scan(&id, &createdAt)
+		if err != nil {
+			err = fmt.Errorf("insert plan item: %w", checkErr(err))
+			return []models.PlanItem{}, err
+		}
+
+		item.ID = id
+		item.CreatedAt = createdAt
+		pItems = append(pItems, item)
+	}
+
+	return pItems, nil
 }
 
 func (r *PlanRepository) FinalizeSelectedPlan(ctx context.Context, dumpID uuid.UUID, planID uuid.UUID) (err error) {

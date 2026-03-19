@@ -122,6 +122,27 @@ func (s *PlanService) GetDumpPlans(ctx context.Context, dumpID uuid.UUID) ([]mod
 	return plans, nil
 }
 
+func (s *PlanService) GetLastGeneratedPlan(ctx context.Context, dumpID uuid.UUID) (models.Plan, error) {
+	log := s.logger.With(
+		zap.String("operation", "get_last_plan"),
+		zap.String("dump_id", dumpID.String()),
+	)
+
+	log.Info("Get last plan started")
+
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	plan, err := s.repo.GetLastGeneratedPlan(ctx, dumpID)
+	if err != nil {
+		log.Error("Get last plan failed", zap.Error(err))
+		return models.Plan{}, fmt.Errorf("get last plan: %w", err)
+	}
+
+	log.Info("Last plan loaded", zap.String("plan_id", plan.ID.String()))
+
+	return plan, nil
+}
 func (s *PlanService) GetUserSavedPlans(ctx context.Context, userID uuid.UUID) ([]models.Plan, error) {
 	log := s.logger.With(
 		zap.String("operation", "get_user_saved_plans"),
@@ -163,4 +184,31 @@ func (s *PlanService) DeleteSavedPlan(ctx context.Context, planID uuid.UUID) err
 	log.Info("Saved plan deleted")
 
 	return nil
+}
+
+func (s *PlanService) CreateNewPlanCandidate(ctx context.Context, plan models.Plan, planItems []models.PlanItem) (models.Plan, []models.PlanItem, error) {
+	log := s.logger.With(
+		zap.String("operation", "submit_answers_and_create_plan"),
+		zap.String("dump_id", plan.DumpID.String()),
+		zap.Int("plan_items_count", len(planItems)),
+	)
+
+	log.Info("Create new plan candidate started")
+
+	ctx, cancel := context.WithTimeout(ctx, 12*time.Second)
+	defer cancel()
+
+	plan, items, err := s.repo.CreateNewPlanCandidate(ctx, plan, planItems)
+	if err != nil {
+		log.Error("Create new plan candidate failed", zap.Error(err))
+		return models.Plan{}, []models.PlanItem{}, fmt.Errorf("create new plan candidate: %w", err)
+	}
+
+	log.Info(
+		"New plan candidate created",
+		zap.String("plan_id", plan.ID.String()),
+		zap.Int("items_count", len(items)),
+	)
+
+	return plan, items, nil
 }
