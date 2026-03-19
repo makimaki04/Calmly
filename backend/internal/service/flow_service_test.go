@@ -419,19 +419,25 @@ func TestFlowService_GenerateNextPlanCandidate(t *testing.T) {
 				getLastGeneratedPlanFn: func(context.Context, uuid.UUID) (models.Plan, error) {
 					return models.Plan{ID: lastPlanID, DumpID: dumpID, Title: "Last plan"}, nil
 				},
-				createPlanFn: func(_ context.Context, gotDumpID uuid.UUID, title string) (uuid.UUID, error) {
-					if gotDumpID != dumpID || title != "Regenerated plan" {
-						t.Fatalf("CreatePlan() got (%v, %q)", gotDumpID, title)
+				createNewPlanCandidateFn: func(_ context.Context, plan models.Plan, items []models.PlanItem) (models.Plan, []models.PlanItem, error) {
+					if plan.DumpID != dumpID || plan.Title != "Regenerated plan" {
+						t.Fatalf("CreateNewPlanCandidate() plan = %+v", plan)
 					}
-					return planID, nil
+					if len(items) != 1 || items[0].Text != "regenerated item" || items[0].Ord != 1 {
+						t.Fatalf("CreateNewPlanCandidate() items = %+v", items)
+					}
+					plan.ID = planID
+					return plan, []models.PlanItem{{ID: uuid.New(), PlanID: planID, Ord: 1, Text: "regenerated item"}}, nil
+				},
+				createPlanFn: func(_ context.Context, gotDumpID uuid.UUID, title string) (uuid.UUID, error) {
+					t.Fatalf("CreatePlan() should not be called, got (%v, %q)", gotDumpID, title)
+					return uuid.Nil, nil
 				},
 			},
 			&planItemStub{
 				createItemsFn: func(_ context.Context, items []models.PlanItem) ([]models.PlanItem, error) {
-					if len(items) != 1 || items[0].Text != "regenerated item" {
-						t.Fatalf("CreateItems() items = %+v", items)
-					}
-					return []models.PlanItem{{ID: uuid.New(), PlanID: planID, Ord: 1, Text: "regenerated item"}}, nil
+					t.Fatalf("CreateItems() should not be called, got %+v", items)
+					return nil, nil
 				},
 				getItemsByPlanIDsFn: func(_ context.Context, ids []uuid.UUID) ([]models.PlanItem, error) {
 					if len(ids) != 1 || ids[0] != lastPlanID {

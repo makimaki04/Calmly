@@ -207,6 +207,10 @@ func (f *FlowService) GenerateNextPlanCandidate(ctx context.Context, userID uuid
 		return models.Plan{}, []models.PlanItem{}, ErrDumpNotBelongUser
 	}
 
+	if activeDump.RawText == nil {
+		return models.Plan{}, []models.PlanItem{}, ErrEmpryDumpRawText
+	}
+
 	analysis, err := f.analysisSvc.GetDumpAnalysis(ctx, activeDump.ID)
 	if err != nil {
 		log.Error("regenerate plan failed", zap.Error(err))
@@ -259,21 +263,14 @@ func (f *FlowService) GenerateNextPlanCandidate(ctx context.Context, userID uuid
 
 	newPlan.DumpID = activeDump.ID
 
-	newPlanID, err := f.planSvc.CreatePlan(ctx, newPlan.DumpID, newPlan.Title)
-	if err != nil {
-		log.Error("Generate next plan candidate failed", zap.Error(err))
-		return models.Plan{}, []models.PlanItem{}, fmt.Errorf("create next plan candidate: %w", err)
-	}
-	newPlan.ID = newPlanID
-
 	for i := range newPlanItems {
 		newPlanItems[i].Ord = i + 1
 	}
 
-	newPlanItems, err = f.planItemSvc.CreateItems(ctx, newPlanItems)
+	newPlan, newPlanItems, err = f.planSvc.CreateNewPlanCandidate(ctx, newPlan, newPlanItems)
 	if err != nil {
-		log.Error("Generate next plan candidate failed", zap.Error(err), zap.String("plan_id", newPlan.ID.String()))
-		return models.Plan{}, []models.PlanItem{}, fmt.Errorf("create next plan candidate items: %w", err)
+		log.Error("Regenerate plan failed", zap.Error(err), zap.String("dump_id", activeDump.ID.String()))
+		return models.Plan{}, []models.PlanItem{}, fmt.Errorf("regenerate plan: %w", err)
 	}
 
 	log.Info(

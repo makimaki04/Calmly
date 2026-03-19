@@ -170,7 +170,14 @@ func newHandlerForTest(activeDumpID uuid.UUID) *Handler {
 				plan.ID = uuid.New()
 				return plan, []models.PlanItem{{ID: uuid.New(), PlanID: plan.ID, Ord: 1, Text: "item"}}, nil
 			},
-			createPlanFn: func(context.Context, uuid.UUID, string) (uuid.UUID, error) { return uuid.New(), nil },
+			createNewPlanCandidateFn: func(_ context.Context, plan models.Plan, items []models.PlanItem) (models.Plan, []models.PlanItem, error) {
+				if plan.Title != "Regenerated plan" || len(items) != 1 || items[0].Ord != 1 {
+					return models.Plan{}, nil, errors.New("unexpected regenerated plan payload")
+				}
+				plan.ID = uuid.New()
+				return plan, []models.PlanItem{{ID: uuid.New(), PlanID: plan.ID, Ord: 1, Text: "regen item"}}, nil
+			},
+			createPlanFn: func(context.Context, uuid.UUID, string) (uuid.UUID, error) { return uuid.Nil, errors.New("CreatePlan should not be called") },
 			savePlanFn:   func(context.Context, uuid.UUID, uuid.UUID) error { return nil },
 			getDumpPlansFn: func(context.Context, uuid.UUID) ([]models.Plan, error) {
 				return []models.Plan{{ID: uuid.New()}}, nil
@@ -181,10 +188,7 @@ func newHandlerForTest(activeDumpID uuid.UUID) *Handler {
 		},
 		&planItemStub{
 			createItemsFn: func(_ context.Context, items []models.PlanItem) ([]models.PlanItem, error) {
-				if len(items) == 0 {
-					return []models.PlanItem{}, nil
-				}
-				return []models.PlanItem{{ID: uuid.New(), PlanID: uuid.New(), Ord: 1, Text: items[0].Text}}, nil
+				return nil, errors.New("CreateItems should not be called")
 			},
 			getItemsByPlanIDsFn: func(context.Context, []uuid.UUID) ([]models.PlanItem, error) {
 				return []models.PlanItem{{ID: uuid.New(), PlanID: lastPlanID, Ord: 1, Text: "item"}}, nil
