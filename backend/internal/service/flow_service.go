@@ -269,8 +269,8 @@ func (f *FlowService) GenerateNextPlanCandidate(ctx context.Context, userID uuid
 
 	newPlan, newPlanItems, err = f.planSvc.CreateNewPlanCandidate(ctx, newPlan, newPlanItems)
 	if err != nil {
-		log.Error("Regenerate plan failed", zap.Error(err), zap.String("dump_id", activeDump.ID.String()))
-		return models.Plan{}, []models.PlanItem{}, fmt.Errorf("regenerate plan: %w", err)
+		log.Error("Save new plan failed", zap.Error(err), zap.String("dump_id", activeDump.ID.String()))
+		return models.Plan{}, []models.PlanItem{}, fmt.Errorf("save new plan plan: %w", err)
 	}
 
 	log.Info(

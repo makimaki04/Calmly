@@ -140,6 +140,10 @@ var (
 		- Avoid duplicating the same meaning across multiple plan items.
 		- If the user already has clarity, do not overcomplicate the plan.
 		- If the situation is emotionally heavy, make the first step especially easy to start.
+		- Keep plan items concise and easy to scan.
+		- Prefer one clear action per item.
+		- Avoid long multi-clause sentences.
+		- Each item should usually be one short sentence, or at most two short sentences.
 	`
 	UserAnswersPromptTamplate = `
 		Generate a structured action plan using the following context.
@@ -245,6 +249,10 @@ var (
 		- Avoid duplicating the same meaning across multiple plan items.
 		- If the user already has clarity, do not overcomplicate the plan.
 		- If the feedback asks for simplification, make the revised plan visibly lighter than the previous one.
+		- Keep plan items concise and easy to scan.
+		- Prefer one clear action per item.
+		- Avoid long multi-clause sentences.
+		- Each item should usually be one short sentence, or at most two short sentences.
 	`
 	UserFeedbackPromptTamplate = `
 		Generate a revised structured action plan using the following context.
