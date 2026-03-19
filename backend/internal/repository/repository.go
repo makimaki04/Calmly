@@ -34,7 +34,9 @@ type DumpAnswers interface {
 type Plan interface {
 	CreatePlan(ctx context.Context, plan models.Plan) (uuid.UUID, error)
 	GetCurrentSessionsPlans(ctx context.Context, dumpID uuid.UUID) ([]models.Plan, error)
+	GetLastGeneratedPlan(ctx context.Context, dumpID uuid.UUID) (models.Plan, error)
 	SubmitAnswersAndCreatePlan(ctx context.Context, answers models.DumpAnswers, plan models.Plan, planItems []models.PlanItem) (models.Plan, []models.PlanItem, error)
+	CreateNewPlanCandidate(ctx context.Context, plan models.Plan, planItems []models.PlanItem) (models.Plan, []models.PlanItem, error)
 	FinalizeSelectedPlan(ctx context.Context, dumpID uuid.UUID, planID uuid.UUID) error
 	GetSavedPlans(ctx context.Context, userID uuid.UUID) ([]models.Plan, error)
 	DeleteSavedPlan(ctx context.Context, planID uuid.UUID) error

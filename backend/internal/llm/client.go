@@ -11,6 +11,20 @@ type AnalysisGenerator interface {
 }
 
 type PlanGenerator interface {
-	GeneratePlan(ctx context.Context, rawText string, tasks []models.Task, questions []models.Question, answers []models.Answer) (models.Plan, []models.PlanItem, error)
-	RegeneratePlan(ctx context.Context, rawtext string,  feedback string) (models.Plan, []models.PlanItem, error)
+	GeneratePlan(
+		ctx context.Context,
+		rawText string,
+		tasks []models.Task,
+		questions []models.Question,
+		answers []models.Answer,
+	) (models.Plan, []models.PlanItem, error)
+	RegeneratePlan(
+		ctx context.Context,
+		rawText string,
+		analysis models.DumpAnalysis,
+		answers models.DumpAnswers,
+		plan models.Plan,
+		planItems []models.PlanItem,
+		feedback string,
+	) (models.Plan, []models.PlanItem, error)
 }

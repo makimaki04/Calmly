@@ -96,6 +96,7 @@ var (
 	ErrActiveDumpNotFound      = errors.New("active session not found")
 	ErrDumpNotBelongUser       = errors.New("dump does not belong to current user session")
 	ErrAnalysisNotFound        = errors.New("invalid session state: analysis is missing")
+	ErrAnswersNotFound         = errors.New("invalid session state: answers is missing")
 	ErrAnswersAlreadySubmitted = errors.New("answers already submitted")
 	ErrEmpryDumpRawText        = errors.New("dump raw text empty")
 )
@@ -157,7 +158,7 @@ func (f *FlowService) SubmitAnswers(ctx context.Context, userID uuid.UUID, answe
 		planItems[i].Ord = i + 1
 	}
 
-	plan, items, err := f.planSvc.SubmitAnswersAndCreatePlan(ctx, answers, plan, planItems)
+	plan, planItems, err = f.planSvc.SubmitAnswersAndCreatePlan(ctx, answers, plan, planItems)
 	if err != nil {
 		if errors.Is(err, repository.ErrAnswersUniqueViolation) {
 			log.Error("Submit answers failed", zap.Error(ErrAnswersAlreadySubmitted))
@@ -170,10 +171,10 @@ func (f *FlowService) SubmitAnswers(ctx context.Context, userID uuid.UUID, answe
 	log.Info(
 		"Answers submitted",
 		zap.String("plan_id", plan.ID.String()),
-		zap.Int("items_count", len(items)),
+		zap.Int("items_count", len(planItems)),
 	)
 
-	return plan, items, nil
+	return plan, planItems, nil
 }
 
 var ErrNoActiveSessionForRegeneration = errors.New("no active session for regeneration")
@@ -187,27 +188,54 @@ func (f *FlowService) GenerateNextPlanCandidate(ctx context.Context, userID uuid
 
 	log.Info("Generate next plan candidate started")
 
-	dump, err := f.dumpSvc.GetUserDump(ctx, userID)
+	activeDump, err := f.dumpSvc.GetUserDump(ctx, userID)
 	if err != nil {
 		log.Error("Generate next plan candidate failed", zap.Error(err))
 		return models.Plan{}, []models.PlanItem{}, fmt.Errorf("get user dump: %w", err)
 	}
 
-	if dump == nil {
+	if activeDump == nil {
 		log.Error("Generate next plan candidate failed", zap.Error(ErrNoActiveSessionForRegeneration))
 		return models.Plan{}, []models.PlanItem{}, ErrNoActiveSessionForRegeneration
 	}
 
-	currPlans, err := f.planSvc.GetDumpPlans(ctx, dump.ID)
-	if err != nil {
-		log.Error("Generate next plan candidate failed", zap.Error(err))
-		return models.Plan{}, []models.PlanItem{}, fmt.Errorf("get current session plans: %w", err)
+	if activeDump.ID != fb.DumpID {
+		log.Error("Generate next plan candidate failed",
+			zap.Error(ErrDumpNotBelongUser),
+			zap.String("active_dump_id", activeDump.ID.String()),
+		)
+		return models.Plan{}, []models.PlanItem{}, ErrDumpNotBelongUser
 	}
 
-	planIDs := make([]uuid.UUID, 0, len(currPlans))
-	for _, p := range currPlans {
-		planIDs = append(planIDs, p.ID)
+	analysis, err := f.analysisSvc.GetDumpAnalysis(ctx, activeDump.ID)
+	if err != nil {
+		log.Error("regenerate plan failed", zap.Error(err))
+		return models.Plan{}, []models.PlanItem{}, fmt.Errorf("get dump analysis: %w", err)
 	}
+
+	if analysis == nil {
+		log.Error("regenerate plan failed", zap.Error(ErrAnalysisNotFound))
+		return models.Plan{}, []models.PlanItem{}, ErrAnalysisNotFound
+	}
+
+	answers, err := f.answersSvc.GetAnswers(ctx, activeDump.ID)
+	if err != nil {
+		log.Error("regenerate plan failed", zap.Error(err))
+		return models.Plan{}, []models.PlanItem{}, fmt.Errorf("get dump answers: %w", err)
+	}
+
+	if answers == nil {
+		log.Error("regenerate plan failed", zap.Error(ErrAnswersNotFound))
+		return models.Plan{}, []models.PlanItem{}, ErrAnswersNotFound
+	}
+
+	lastPlan, err := f.planSvc.GetLastGeneratedPlan(ctx, activeDump.ID)
+	if err != nil {
+		log.Error("Generate next plan candidate failed", zap.Error(err))
+		return models.Plan{}, []models.PlanItem{}, fmt.Errorf("get current session last plan: %w", err)
+	}
+
+	planIDs := []uuid.UUID{lastPlan.ID}
 
 	planItems, err := f.planItemSvc.GetItemsByPlanIDs(ctx, planIDs)
 	if err != nil {
@@ -215,13 +243,21 @@ func (f *FlowService) GenerateNextPlanCandidate(ctx context.Context, userID uuid
 		return models.Plan{}, []models.PlanItem{}, fmt.Errorf("get plan items by plan ids: %w", err)
 	}
 
-	_ = planItems
-	// LLM generate new plan and plan_items here following user feedback and current plans and planItems
-
-	newPlan := models.Plan{
-		DumpID: dump.ID,
-		Title:  "Plan",
+	newPlan, newPlanItems, err := f.planGen.RegeneratePlan(
+		ctx,
+		*activeDump.RawText,
+		*analysis,
+		*answers,
+		lastPlan,
+		planItems,
+		fb.Text,
+	)
+	if err != nil {
+		log.Error("Regenerate plan failed", zap.Error(err), zap.String("dump_id", activeDump.ID.String()))
+		return models.Plan{}, []models.PlanItem{}, fmt.Errorf("regenerate plan: %w", err)
 	}
+
+	newPlan.DumpID = activeDump.ID
 
 	newPlanID, err := f.planSvc.CreatePlan(ctx, newPlan.DumpID, newPlan.Title)
 	if err != nil {
@@ -230,9 +266,11 @@ func (f *FlowService) GenerateNextPlanCandidate(ctx context.Context, userID uuid
 	}
 	newPlan.ID = newPlanID
 
-	mockPlanItems := []models.PlanItem{}
+	for i := range newPlanItems {
+		newPlanItems[i].Ord = i + 1
+	}
 
-	items, err := f.planItemSvc.CreateItems(ctx, mockPlanItems)
+	newPlanItems, err = f.planItemSvc.CreateItems(ctx, newPlanItems)
 	if err != nil {
 		log.Error("Generate next plan candidate failed", zap.Error(err), zap.String("plan_id", newPlan.ID.String()))
 		return models.Plan{}, []models.PlanItem{}, fmt.Errorf("create next plan candidate items: %w", err)
@@ -241,12 +279,10 @@ func (f *FlowService) GenerateNextPlanCandidate(ctx context.Context, userID uuid
 	log.Info(
 		"Next plan candidate generated",
 		zap.String("plan_id", newPlan.ID.String()),
-		zap.Int("current_plans_count", len(currPlans)),
-		zap.Int("current_items_count", len(planItems)),
-		zap.Int("items_count", len(items)),
+		zap.Int("items_count", len(newPlanItems)),
 	)
 
-	return newPlan, items, nil
+	return newPlan, newPlanItems, nil
 }
 
 func (f *FlowService) FinalizePlanSelection(ctx context.Context, dumpID uuid.UUID, planID uuid.UUID) error {

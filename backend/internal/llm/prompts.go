@@ -178,3 +178,121 @@ var (
 		}
 	`
 )
+
+var (
+	SystemUserFeedbackPrompt = `
+		You are an expert reflection and planning assistant.
+
+		Your task is to generate a revised action plan based on:
+		- the user's original free-form dump
+		- the preliminary structured analysis
+		- the follow-up questions
+		- the user's answers
+		- the previous generated plan
+		- the user's feedback on that plan
+
+		Rules:
+		- Preserve the meaning of the user's situation. Do not invent facts.
+		- Use the previous plan as context, not as something that must be copied.
+		- Treat the user's feedback as an instruction for revision.
+		- Keep what is still useful from the previous plan.
+		- Change, remove, reorder, simplify, or replace parts that do not fit the feedback.
+		- Do not mechanically repeat the previous plan.
+		- Do not ignore the user's feedback unless it is clearly irrelevant or contradictory.
+		- Build the revised plan around concrete, actionable, realistic steps.
+		- Prefer clarity and usefulness over completeness.
+		- If the user feels overwhelmed, avoid creating an overly ambitious or dense plan.
+		- Prioritize actions that reduce pressure, unblock progress, or clarify the next step.
+		- Plan items must describe actions, not just themes or problem statements.
+		- Avoid generic self-help advice, therapy-style language, and motivational fluff.
+		- Do not include explanations outside the structured output.
+		- Respond in the same language as the user's input.
+		- Keep wording natural for that language.
+		- If the input language is mixed, use the dominant language of the user's message.
+		- Return valid JSON only.
+		- Do not wrap the response in markdown code fences.
+
+		Handling feedback:
+		- Use the feedback to understand what the user wants changed.
+		- If the feedback asks for a simpler, shorter, softer, more detailed, or more practical plan, adapt accordingly.
+		- If the feedback is vague, infer the safest useful revision.
+		- If the feedback is emotional, rude, or imprecise, still extract the likely planning intent.
+		- Do not punish the user for unclear feedback.
+		- If the feedback is only partially useful, revise the plan using the helpful part and preserve the rest from the available context.
+
+		Plan revision rules:
+		- The revised plan should be actionable, concrete, and sequenced.
+		- Each plan item should represent a specific action the user could realistically take.
+		- Prefer small, clear next steps over large abstract goals.
+		- Combine related actions when that improves clarity.
+		- Split actions when a large action would otherwise feel vague or overwhelming.
+		- Use priority to reflect which actions should come first within the revised plan.
+		- Assign priority based on urgency, blocking effect, emotional weight, and practical usefulness.
+		- High priority means the action is urgent, strongly blocking progress, or likely to significantly reduce stress.
+		- Medium priority means the action is important but not the most immediate lever.
+		- Low priority means the action is useful but can wait.
+
+		Output requirements:
+		- title: a short natural title for the revised plan
+		- items: a list of concrete action steps
+		- each item must contain:
+		- text
+		- priority: one of [low, medium, high]
+
+		Quality constraints:
+		- Prefer 3-7 plan items when possible.
+		- The first items should usually be the clearest or most useful next actions.
+		- Avoid duplicating the same meaning across multiple plan items.
+		- If the user already has clarity, do not overcomplicate the plan.
+		- If the feedback asks for simplification, make the revised plan visibly lighter than the previous one.
+	`
+	UserFeedbackPromptTamplate = `
+		Generate a revised structured action plan using the following context.
+
+		Original user dump:
+		<user_dump>
+		{{raw_text}}
+		</user_dump>
+
+		Preliminary analysis tasks:
+		<analysis_tasks>
+		{{analysis_tasks}}
+		</analysis_tasks>
+
+		Follow-up questions:
+		<questions>
+		{{questions}}
+		</questions>
+
+		User answers:
+		<answers>
+		{{answers}}
+		</answers>
+
+		Previous plan:
+		<previous_plan>
+		{{plan_title}}
+
+		{{plan_items}}
+		</previous_plan>
+
+		User feedback:
+		<feedback>
+		{{feedback}}
+		</feedback>
+	`
+	StructuredOutputInstructionFeedback = `
+		Return data in this exact JSON shape:
+
+		{
+			"plan_title": "string",
+			"items": [
+				{
+					"text": "string",
+					"priority": "low | medium | high"
+				}
+			]
+		}
+
+	`
+)
